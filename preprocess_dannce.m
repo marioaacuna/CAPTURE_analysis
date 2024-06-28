@@ -4,9 +4,9 @@
 function ratception_struct = preprocess_dannce(filein,fileoutput,animalname,input_params)
 
 % Inputs: filein: a .mat file containing a predictions.mat DANNCE struct, with a
-%                 struct containing each markers x-y-z prediction 
+%                 struct containing each markers x-y-z prediction
 %
-%         fileoutput: a .mat file 
+%         fileoutput: a .mat file
 %
 %         animalname: the name of the animal (default - "rats") that
 %             defines the number of links and markers to use for a given
@@ -24,7 +24,7 @@ function ratception_struct = preprocess_dannce(filein,fileoutput,animalname,inpu
 
 %% check the input -- no input means run with defaults
 if isempty(filein)
-datahere = load('C:\Users\Jesse Marshall\Documents\GitHub\Movement_analysis\Cortex_analysis\DemoRepo\Data\predictions.mat');
+    datahere = load('C:\Users\Jesse Marshall\Documents\GitHub\Movement_analysis\Cortex_analysis\DemoRepo\Data\predictions.mat');
 else
     datahere = load(filein);
 end
@@ -34,23 +34,23 @@ if isempty(fileoutput)
 end
 
 if isempty(animalname)
-animalname = 'rats';
+    animalname = 'rats';
 end
-
+overwrite = 0;
 if ~isempty(input_params)
-if isfield(input_params,'SpineF_marker')   
-       f = fieldnames(datahere.predictions);
-    v = struct2cell(datahere.predictions);
-    f{strmatch(input_params.SpineF_marker,f,'exact')} = 'SpineF';
-    f{strmatch(input_params.SpineM_marker,f,'exact')} = 'SpineM';
-    a = cell2struct(v,f);
-    disp(a)
-    datahere.predictions=a;    
-end
+    if isfield(input_params,'SpineF_marker')
+        f = fieldnames(datahere.predictions);
+        v = struct2cell(datahere.predictions);
+        f{strmatch(input_params.SpineF_marker,f,'exact')} = 'SpineF';
+        f{strmatch(input_params.SpineM_marker,f,'exact')} = 'SpineM';
+        a = cell2struct(v,f);
+        disp(a)
+        datahere.predictions=a;
+    end
 end
 
 
-%do some surgery on names -- important for 
+%do some surgery on names -- important for
 if isfield(datahere.predictions,'sampleID')
     datahere.sampleID = datahere.predictions.sampleID;
     datahere.predictions =rmfield(datahere.predictions,'sampleID');
@@ -58,23 +58,23 @@ end
 
 
 if ~isempty(input_params)
-if isfield(input_params,'conversion_factor') 
-    markernames = fieldnames(datahere.predictions);
-for lk=1:numel(markernames)
-    datahere.predictions.(markernames{lk}) =  ...
-        input_params.conversion_factor.*datahere.predictions.(markernames{lk});
-    
-end
-end
+    if isfield(input_params,'conversion_factor')
+        markernames = fieldnames(datahere.predictions);
+        for lk=1:numel(markernames)
+            datahere.predictions.(markernames{lk}) =  ...
+                input_params.conversion_factor.*datahere.predictions.(markernames{lk});
+
+        end
+    end
 end
 
-if isempty(input_params) || ~isfield(input_params,'repfactor') 
-params.repfactor =10;
+if isempty(input_params) || ~isfield(input_params,'repfactor')
+    params.repfactor =10;
 else
-   params.repfactor = input_params.repfactor;
+    params.repfactor = input_params.repfactor;
 end
-    
-    
+
+
 % file specific changes in names
 if isfield(datahere.predictions,'HeadBR')
     f = fieldnames(datahere.predictions);
@@ -95,8 +95,8 @@ preprocessing_parameters.bad_frame_surround_number = 1;
 preprocessing_parameters.interpolation_max_length = 5;
 preprocessing_parameters.meanvelocity_lowpass = 60;
 preprocessing_parameters.meanvelocity_lowpass = 60;
-preprocessing_parameters.fastvelocity_threshold = 0.01;% 0.1;
-preprocessing_parameters.moving_threshold = 0.00001;%0.015;
+preprocessing_parameters.fastvelocity_threshold = 0.1;% 0.1;
+preprocessing_parameters.moving_threshold = 0.015;%0.015; m = 0.00001
 preprocessing_parameters.moving_framewindow = 600;
 
 % the difference in framerate between the video and the canonical motion capture
@@ -111,6 +111,11 @@ ratception_struct.markercolor = colors;
 ratception_struct.markercolor = colors;
 
 %% save
-save(fileoutput,'ratception_struct','-v7.3')
+% check if it exists fits
+if ~exist(fileoutput, 'file') || overwrite
+    save(fileoutput,'ratception_struct','-v7.3')
+else
+    disp('data not saved, overwrite maybe')
+end
 
 

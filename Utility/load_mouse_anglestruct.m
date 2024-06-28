@@ -67,56 +67,56 @@ anglestruct.planar_trios{4}.namesuse = [1 2];
 %shin line, relative to the plane of knee and hips, with axes
 %chosen to get angles >0 to avoid ambiguity/0 crossing
 
-% anglestruct.planar_trios{5}.plane = {{'HindlimbR','HindlimbL'},{'HindlimbL','HindpawL'}};
-% anglestruct.planar_trios{5}.vector = {'HindpawL','ShinL'};
-% anglestruct.planar_trios{5}.name1 = 'shinl_yaw';
-% anglestruct.planar_trios{5}.name2 = '~';
-% anglestruct.planar_trios{5}.namesuse = [1 ];
-% 
-% anglestruct.planar_trios{6}.plane = {{'HindlimbL','HindlimbR'},{'HindlimbR','HindpawR'}};
-% anglestruct.planar_trios{6}.vector = {'HindpawR','ShinR'};
-% anglestruct.planar_trios{6}.name1 = 'shinr_yaw';
-% anglestruct.planar_trios{6}.name2 = '~';
-% anglestruct.planar_trios{6}.namesuse = [1 ];
-% 
-% anglestruct.planar_trios{7}.plane = {{'HindlimbR','HindlimbL'},{'HindlimbL','HindpawL'}};
-% anglestruct.planar_trios{7}.vector = {'HindpawL','ShinL'};
-% anglestruct.planar_trios{7}.name1 = '~';
-% anglestruct.planar_trios{7}.name2 = 'shinl_pitch';
-% anglestruct.planar_trios{7}.namesuse = [ 2];
-% 
-% anglestruct.planar_trios{8}.plane = {{'HindlimbL','HindlimbR'},{'HindlimbR','HindpawR'}};
-% anglestruct.planar_trios{8}.vector = {'HindpawR','ShinR'};
-% anglestruct.planar_trios{8}.name1 = '~';
-% anglestruct.planar_trios{8}.name2 = 'shinr_pitch';
-% anglestruct.planar_trios{8}.namesuse = [ 2];
-% 
-% 
-% % arm angles
-% 
-% anglestruct.planar_trios{9}.plane = {{'ForelimbR','ForelimbL'},{'ForelimbL','ForepawL'}};
-% anglestruct.planar_trios{9}.vector = {'ForepawL','ArmL'};
-% anglestruct.planar_trios{9}.name1 = 'arml_yaw';
-% anglestruct.planar_trios{9}.name2 = '~';
-% anglestruct.planar_trios{9}.namesuse = [1 ];
-% 
-% anglestruct.planar_trios{10}.plane = {{'ForelimbL','ForelimbR'},{'ForelimbR','ForepawR'}};
-% anglestruct.planar_trios{10}.vector = {'ForepawR','ArmR'};
-% anglestruct.planar_trios{10}.name1 = 'armr_yaw';
-% anglestruct.planar_trios{10}.name2 = '~';
-% anglestruct.planar_trios{10}.namesuse = [1 ];
-% 
-% anglestruct.planar_trios{11}.plane = {{'ForelimbL','ForepawL'},{'ForelimbR','ForelimbL'}};
-% anglestruct.planar_trios{11}.vector = {'ForepawL','ArmL'};
-% anglestruct.planar_trios{11}.name1 = '~';
-% anglestruct.planar_trios{11}.name2 = 'arml_pitch';
-% anglestruct.planar_trios{11}.namesuse = [ 2];
-% 
-% anglestruct.planar_trios{12}.plane = {{'ForelimbR','ForepawR'},{'ForelimbL','ForelimbR'}};
-% anglestruct.planar_trios{12}.vector = {'ForepawR','ArmR'};
-% anglestruct.planar_trios{12}.name1 = '~';
-% anglestruct.planar_trios{12}.name2 = 'armr_pitch';
-% anglestruct.planar_trios{12}.namesuse = [ 2];
+anglestruct.planar_trios{5}.plane = {{'HindlimbR','HindlimbL'},{'HindlimbL','HindpawL'}};
+anglestruct.planar_trios{5}.vector = {'HindpawL','ShinL'};
+anglestruct.planar_trios{5}.name1 = 'shinl_yaw';
+anglestruct.planar_trios{5}.name2 = '~';
+anglestruct.planar_trios{5}.namesuse = [1 ];
+
+anglestruct.planar_trios{6}.plane = {{'HindlimbL','HindlimbR'},{'HindlimbR','HindpawR'}};
+anglestruct.planar_trios{6}.vector = {'HindpawR','ShinR'};
+anglestruct.planar_trios{6}.name1 = 'shinr_yaw';
+anglestruct.planar_trios{6}.name2 = '~';
+anglestruct.planar_trios{6}.namesuse = [1 ];
+
+anglestruct.planar_trios{7}.plane = {{'HindlimbR','HindlimbL'},{'HindlimbL','HindpawL'}};
+anglestruct.planar_trios{7}.vector = {'HindpawL','ShinL'};
+anglestruct.planar_trios{7}.name1 = '~';
+anglestruct.planar_trios{7}.name2 = 'shinl_pitch';
+anglestruct.planar_trios{7}.namesuse = [ 2];
+
+anglestruct.planar_trios{8}.plane = {{'HindlimbL','HindlimbR'},{'HindlimbR','HindpawR'}};
+anglestruct.planar_trios{8}.vector = {'HindpawR','ShinR'};
+anglestruct.planar_trios{8}.name1 = '~';
+anglestruct.planar_trios{8}.name2 = 'shinr_pitch';
+anglestruct.planar_trios{8}.namesuse = [ 2];
+
+
+% arm angles
+
+anglestruct.planar_trios{9}.plane = {{'ForelimbR','ForelimbL'},{'ForelimbL','ForepawL'}};
+anglestruct.planar_trios{9}.vector = {'ForepawL','ArmL'};
+anglestruct.planar_trios{9}.name1 = 'arml_yaw';
+anglestruct.planar_trios{9}.name2 = '~';
+anglestruct.planar_trios{9}.namesuse = [1 ];
+
+anglestruct.planar_trios{10}.plane = {{'ForelimbL','ForelimbR'},{'ForelimbR','ForepawR'}};
+anglestruct.planar_trios{10}.vector = {'ForepawR','ArmR'};
+anglestruct.planar_trios{10}.name1 = 'armr_yaw';
+anglestruct.planar_trios{10}.name2 = '~';
+anglestruct.planar_trios{10}.namesuse = [1 ];
+
+anglestruct.planar_trios{11}.plane = {{'ForelimbL','ForepawL'},{'ForelimbR','ForelimbL'}};
+anglestruct.planar_trios{11}.vector = {'ForepawL','ArmL'};
+anglestruct.planar_trios{11}.name1 = '~';
+anglestruct.planar_trios{11}.name2 = 'arml_pitch';
+anglestruct.planar_trios{11}.namesuse = [ 2];
+
+anglestruct.planar_trios{12}.plane = {{'ForelimbR','ForepawR'},{'ForelimbL','ForelimbR'}};
+anglestruct.planar_trios{12}.vector = {'ForepawR','ArmR'};
+anglestruct.planar_trios{12}.name1 = '~';
+anglestruct.planar_trios{12}.name2 = 'armr_pitch';
+anglestruct.planar_trios{12}.namesuse = [ 2];
 
 %
 %elbow angles

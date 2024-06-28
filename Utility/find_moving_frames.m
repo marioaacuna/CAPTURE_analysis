@@ -16,6 +16,11 @@ params.gaussorder = 2.5;
     markers_preproc.(fnames{ll})(badfr,:) = nan;
   end
   
+  % Update MA 
+  warning('off')
+  % the actual hip values are different. Originally, they were [9,10]
+  hip_fnames = find(ismember(fnames, {'KneeL', 'KneeR'}));
+
   %get subgp velocity. should ignore nans
 [av_vel_head,vel_comps,av_std,std_comps,av_accel,accel_comps,av_std_accel,std_comps_accel] = ...
     get_markersubgroup_velocity(markers_preproc,[1,2,3],params);
@@ -26,7 +31,7 @@ av_vel_head(isnan(av_vel_head)) = 0;
 av_vel_trunk(isnan(av_vel_trunk)) = 0;
 
 [av_vel_hips,vel_comps,av_std,std_comps,av_accel,accel_comps,av_std_accel,std_comps_accel] = ...
-    get_markersubgroup_velocity(markers_preproc,[9,10],params);
+    get_markersubgroup_velocity(markers_preproc,hip_fnames',params);
 av_vel_hips(isnan(av_vel_hips)) = 0;
 
 
@@ -60,6 +65,9 @@ end
 if nargin <3 || velonly == 0
 %thresh = 0.1;
 thresh = preprocessing_parameters.fastvelocity_threshold;
+% MA:
+% thresh = preprocessing_parameters.moving_threshold;
+
 fastframes = find(filteredvelocity>thresh);
 nonfastframes = setxor(1:numel(filteredvelocity),fastframes);
 

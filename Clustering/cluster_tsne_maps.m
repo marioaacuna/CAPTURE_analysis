@@ -7,13 +7,14 @@ analysisstruct_out = analysisstruct;
 %% density, watershed, images
 tsnehere =analysisstruct.zValues;
 density_maps = cell(1,numel(analysisstruct.conditions_to_run)+1);
-density_max = params.expansion_factor*max(tsnehere(:));
+density_max = params.expansion_factor*max(abs(tsnehere(:)));
+% density_max = params.expansion_factor*max(tsnehere(:));
 density_res = params.density_res ;
 density_width = params.density_width;
 num_conditions_true = numel(unique(analysisstruct.condition_inds));
 num_conditions = num_conditions_true+1;
 
-        fprintf('plotting density maps \n');
+fprintf('plotting density maps \n');
 if ~isfield(params,'reembed') || params.reembed == 0
 
 figure(480)

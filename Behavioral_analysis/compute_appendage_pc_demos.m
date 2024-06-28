@@ -160,6 +160,7 @@ end
 %save coeffs regardless
 fprintf('saving appendage coefficients \n')
 if save_coeffs
+   
 try
    save(coeffstruct_in,'-struct','coeffstruct','-v7.3')
 catch ME

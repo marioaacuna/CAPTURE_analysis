@@ -48,6 +48,10 @@ pos_vec=[merged_left merged_bottom merged_width merged_height];
 
 % h_subplot=subplot(m,n,p,varargin{:},'Position',pos_vec);
 % Above line doesn't work as subplot tends to ignore 'position' when same mnp is utilized
+if any(pos_vec < 0)
+    neg_idx =(pos_vec) < 0;
+    pos_vec(neg_idx) = abs(pos_vec(neg_idx));
+end
 h_subplot=subplot('Position',pos_vec,varargin{:});
 
 if nargout~=0
