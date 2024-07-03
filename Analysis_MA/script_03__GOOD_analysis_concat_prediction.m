@@ -14,8 +14,13 @@ do_extra_features = 0;
 
 init_frame_rate = 100; % effective frame rate of videos
 
-% so far for these test, we have the data on local drive D
-rootpath = 'D:\CAPTURE';
+if ispc
+    % so far for these test, we have the data on local drive D
+    rootpath = 'D:\CAPTURE';
+else
+    rootpath = '/Users/mario/Library/CloudStorage/OneDrive-UniversitaetBern/Coding_playground/CAPTURE_temp_data_mac';
+end
+
 if ~exist("rootpath", 'dir'), mkdir(rootpath); end
  
 % animal_list = {'326', '327', '328', '330', '332_training', '332', '334', '335', '336'};
@@ -213,7 +218,7 @@ else
 end
 
 %%
-analysisparams.tsnegranularity = 50;% 120; 250(1.5, corr_thr) ; 100(1.5)- very detailed; 100(2.5)-very good
+analysisparams.tsnegranularity = 50;% 50:default ;120; 250(1.5, corr_thr) ; 100(1.5)- very detailed; 100(2.5)-very good
 % Mario: it seems that high number of frames (between 100 - 120) yield better results
 
 %subselect a particular set of features
@@ -244,13 +249,13 @@ end
 % this does not work, see  compute_tsne_features.m line 144
 %% Plot dim red
 zvals_filename = fullfile(roothpath_CAPTURE, 'zvals.mat');
-perplexity = 20; % 75;
+perplexity = 250; % 75;
 
 if ~exist(zvals_filename, 'file') || overwrite_zvals
 
     %run tsne
     disp('%% Running TSNE %%')
-    zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'verbose',1); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
+    zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
     % save zvals to then read later if necessary
     save(zvals_filename, 'zvals','-mat')
 else
@@ -265,7 +270,7 @@ disp('Done')
 figure(1)
 gscatter(zvals(:,1), zvals(:,2), cond_inds)
 % plot(zvals(:,1),zvals(:,2),'ob','MarkerFaceColor','b', 'MarkerSize',2)
-title(num2str(analysisparams.tsnegranularity))
+title({['Granu: ',num2str(analysisparams.tsnegranularity)], ['Perp: ', num2str(perplexity)]})
 set(gcf,'Position',([100 100 1100 1100]))
 set(gcf, 'color', 'w')
 
@@ -274,7 +279,7 @@ set(gcf, 'color', 'w')
 disp('%% INIT clustering %%')
 analysisstruct.zValues = zvals;
 analysisstruct.params.density_res = 1001; %resolution of the map
-analysisstruct.params.density_width = 3;%2; %density kernel in tsne space 0.5 for pca; 2.5 tsne .  !! 5 so far works well
+analysisstruct.params.density_width = 2;%default:3; 2; %density kernel in tsne space 0.5 for pca; 2.5 tsne .  !! 5 so far works well
 analysisstruct.params.expansion_factor = 1.1; %add a little room to the map after kernel smoothing
 analysisstruct.params.density_threshold = 1*10^(-5); %remove regions in plots with low density
 analysisstruct.matchedconds = {[unique(analysisstruct.condition_inds)]}; %if running over multiple conditions
