@@ -245,7 +245,8 @@ mean_pose = zeros(36,density_objects);
 pose_var = zeros(36,density_objects);
 frames_agg =cell(1,density_objects);
 for ll = 1:density_cc{cond_select}.NumObjects %good_clusters %
-    mlist = intersect([1:10,17,18],1:numel(analysisstruct_out.mocapstruct_reduced_agg{1}.markernames)); % check if this is correct # TODO
+    % mlist = intersect([1:10,17,18],1:numel(analysisstruct_out.mocapstruct_reduced_agg{1}.markernames)); % check if this is correct # TODO
+    mlist =1:numel(analysisstruct_out.mocapstruct_reduced_agg{1}.markernames); % check if this is correct # TODO
     allframes = [];
     if (cond_select == num_conditions)
         for kk = 1:num_conditions-1

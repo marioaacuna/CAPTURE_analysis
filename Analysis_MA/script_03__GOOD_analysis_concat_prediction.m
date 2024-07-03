@@ -244,11 +244,13 @@ end
 % this does not work, see  compute_tsne_features.m line 144
 %% Plot dim red
 zvals_filename = fullfile(roothpath_CAPTURE, 'zvals.mat');
+perplexity = 20; % 75;
+
 if ~exist(zvals_filename, 'file') || overwrite_zvals
 
     %run tsne
     disp('%% Running TSNE %%')
-    zvals = tsne(analysisstruct.jt_features, "Perplexity",75, 'verbose',1); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
+    zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'verbose',1); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
     % save zvals to then read later if necessary
     save(zvals_filename, 'zvals','-mat')
 else
@@ -280,7 +282,7 @@ analysisstruct.conditions_to_run = [unique(analysisstruct.condition_inds)];
 analysisstruct.tsnegranularity = analysisparams.tsnegranularity;
 
 params.reorder=1;
-analysisstruct = compute_analysis_clusters_demo(analysisstruct,params);
+analysisstruct = compute_analysis_clusters_demo(analysisstruct,params); % check line 248, cluster_tsne_map.m
 disp('%% Done clustering %%')
 
 %% behavior plots and movies
@@ -386,16 +388,20 @@ up_sampled_identifier = repelem(animal_condition_identifier, input_params.repfac
 good_frames_animal_identifier = up_sampled_identifier(analysisstruct.frames_with_good_tracking{1, 1});
 
  
-% Assuming clusters are stored in analysisstruct.annot_reordered{end} 
 clusters = analysisstruct.annot_reordered{end};
 
 % Identify the unique clusters
 unique_clusters = unique(clusters);
-
+numClusters = numel(unique_clusters);
 % Initialize storage for the density of each cluster per condition
 cluster_density_condition_1 = zeros(size(unique_clusters));
 cluster_density_condition_0 = zeros(size(unique_clusters));
 
+% Initialize matrices to store results
+clusterComposition = zeros(numClusters, 2);  % [S_count, F_count]
+
+   
+    
 for c = 1:length(unique_clusters)
     cluster_index = unique_clusters(c);
     
@@ -408,7 +414,19 @@ for c = 1:length(unique_clusters)
     % Count frames for each condition
     cluster_density_condition_1(c) = sum(cellfun(@(x) endsWith(x, '_F'), animal_conditions_in_cluster));
     cluster_density_condition_0(c) = sum(cellfun(@(x) endsWith(x, '_S'), animal_conditions_in_cluster));
+    
+    
+    clusterComposition(c, 1) =  sum(cellfun(@(x) endsWith(x, '_F'), animal_conditions_in_cluster));
+    clusterComposition(c, 2) =  sum(cellfun(@(x) endsWith(x, '_S'), animal_conditions_in_cluster));
+
+
+
+
 end
+
+
+
+
 
 % Calculate the difference in number of frames between condition 1 and 0 for each cluster
 difference_frames = cluster_density_condition_1 - cluster_density_condition_0;
@@ -438,9 +456,37 @@ for ic = 1:numel(to_take)
         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
     title(this_cls)
 end
-% % Assuming clusters are stored in analysisstruct.annot_reordered{end} 
+
+
+%% new
+
+totalFrames = sum(clusterComposition, 2);
+clusterProportions = clusterComposition ./ totalFrames;
+
+% Identify predominantly associated clusters
+threshold = 0.75;  % Define threshold for "predominant" association
+predominantS = find(clusterProportions(:, 1) > threshold);
+predominantF = find(clusterProportions(:, 2) > threshold);
+
+to_take = predominantF;
+figure('pos', [10,300,1500,1900])
+n_rows = ceil(sqrt(numel(to_take)));
+n_cols = ceil(sqrt(numel(to_take)));
+
+for ic = 1:numel(to_take)
+    subplot(n_rows, n_cols, ic)
+    this_cls = to_take(ic);
+    fprintf('ic = %i - \n', this_cls)
+    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+    title(this_cls)
+end
+
+%%
+
+% % Assuming clusters are stored in analysisstruct.annot_reordered{end}
 % clusters = analysisstruct.annot_reordered{end};
-% 
+%
 % % Create a mapping between animal ID and condition
 % animal_to_condition = containers.Map(animal_list, conditions); 
 % 
