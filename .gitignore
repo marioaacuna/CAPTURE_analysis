@@ -76,6 +76,7 @@ val2017.zip
 *.m~
 *.mat
 !targets*.mat
+*.asv
 
 # Neural Network weights -----------------------------------------------------------------------------------------------
 *.weights
@@ -288,4 +289,4 @@ crashlytics-build.properties
 fabric.properties
 
 # Vs code
-.vscode
+*.vscode

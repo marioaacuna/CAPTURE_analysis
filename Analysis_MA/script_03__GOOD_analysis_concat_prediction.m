@@ -12,11 +12,23 @@ overwrite_coefficient = 0; % Overwrite dim red coeffs
 overwrite_zvals = 0; % Overwrite tsne zvals
 do_extra_features = 0;
 
-% so far for these test, we have the data on local drive D
-rootpath = 'D:\test_CAPTURE';
+init_frame_rate = 100; % effective frame rate of videos
 
-animal_list = {'326', '327', '328', '330', '332_training', '332', '334', '335', '336'};
-conditions = {'F', 'F', 'S', 'S', 'N', 'S', 'F', 'F', 'F'};
+% so far for these test, we have the data on local drive D
+rootpath = 'D:\CAPTURE';
+if ~exist("rootpath", 'dir'), mkdir(rootpath); end
+ 
+% animal_list = {'326', '327', '328', '330', '332_training', '332', '334', '335', '336'};
+% conditions = {'F', 'F', 'S', 'S', 'N', 'S', 'F', 'F', 'F'};
+
+% Define the animals and conditions
+animals = {'AK_552', 'AK_553', 'AK_665', 'AK_667'}; % animal ids
+conditions = {'0', '1'}; % 0 for condition 'S', and 1 for condition 'F'
+dannce_path = 'D:\DANNCE';
+% Initialize structures
+agg_predictions = struct();
+animal_condition_identifier = {};
+
 
 analysis_filename = fullfile(rootpath,'raw_concat_analysis.mat' );
 filename_predictions = fullfile(rootpath, 'agg_predictions.mat');
@@ -31,44 +43,94 @@ if run_pred_concat || overwrite_pred_concat
     disp('%% Running concatenation')
     % Initialize the aggregate predictions structure
     agg_predictions = struct();
-    animal_frames_identifier = {};
+    animal_condition_identifier = {};
     % initialize frames id
     % agg_predictions.frames_id = [];
     % Current offset for tracking frames
     offset = 0;
 
-    % Loop through each animal to aggregate predictions
-    for i = 1:length(animal_list)
-        animal_id = animal_list{i};
+    % % Loop through each animal to aggregate predictions
+    % for i = 1:length(animal_list)
+    %     animal_id = animal_list{i};
+    % 
+    %     % Load predictions for the current animal
+    %     load_path = fullfile(rootpath, animal_id, 'predictions.mat');
+    %     load(load_path); % Assuming the loaded structure is called 'predictions'
+    % 
+    %     body_parts = fieldnames(predictions); % Get the list of body parts
+    % 
+    %     for j = 1:length(body_parts)
+    %         part_name = body_parts{j};
+    % 
+    %         if isfield(agg_predictions, part_name)
+    %             if ~strcmp(part_name, 'sampleID')
+    %                 % Concatenate if the field already exists in agg_predictions
+    %                 agg_predictions.(part_name) = cat(1, agg_predictions.(part_name), predictions.(part_name));
+    %             else
+    %                 agg_predictions.(part_name) = cat(2, agg_predictions.(part_name), predictions.(part_name) + 8 + agg_predictions.(part_name)(end));
+    %             end
+    %         else
+    %             % Otherwise, initialize the field in agg_predictions
+    %             agg_predictions.(part_name) = predictions.(part_name);
+    %         end
+    %     end
+    %     % store the frames id
+    %     % agg_predictions.frames_id = [agg_predictions.frames_id; [1:1:length(agg_predictions.sampleID)]'];
+    %     % Update the animal_frames_identifier
+    %     num_frames_for_current_animal = size(predictions.(body_parts{1}), 1);
+    %     animal_frames_identifier = [animal_frames_identifier; repmat({animal_id}, num_frames_for_current_animal, 1)];
+    % end
 
-        % Load predictions for the current animal
-        load_path = fullfile(rootpath, animal_id, 'predictions.mat');
-        load(load_path); % Assuming the loaded structure is called 'predictions'
-        
-        body_parts = fieldnames(predictions); % Get the list of body parts
+    % Loop through each animal
+    for i = 1:length(animals)
+        animal_id = animals{i};
 
-        for j = 1:length(body_parts)
-            part_name = body_parts{j};
+        % Loop through each condition for the current animal
+        for j = 1:length(conditions)
+            condition = conditions{j};
 
-            if isfield(agg_predictions, part_name)
-                if ~strcmp(part_name, 'sampleID')
-                    % Concatenate if the field already exists in agg_predictions
-                    agg_predictions.(part_name) = cat(1, agg_predictions.(part_name), predictions.(part_name));
-                else
-                    agg_predictions.(part_name) = cat(2, agg_predictions.(part_name), predictions.(part_name) + 8 + agg_predictions.(part_name)(end));
-                end
-            else
-                % Otherwise, initialize the field in agg_predictions
-                agg_predictions.(part_name) = predictions.(part_name);
+            % Construct the path to the predictions file
+            load_path = fullfile(dannce_path, animal_id, condition,'DANNCE\predict_results', 'predictions.mat');
+
+            % Check if the file exists
+            if ~exist(load_path, 'file')
+                warning('File not found: %s', load_path);
+                continue;
             end
-        end
-        % store the frames id
-        % agg_predictions.frames_id = [agg_predictions.frames_id; [1:1:length(agg_predictions.sampleID)]'];
-        % Update the animal_frames_identifier
-        num_frames_for_current_animal = size(predictions.(body_parts{1}), 1);
-        animal_frames_identifier = [animal_frames_identifier; repmat({animal_id}, num_frames_for_current_animal, 1)];
-    end
 
+            % Load predictions for the current animal and condition
+            load(load_path); % Assuming the loaded structure is called 'predictions'
+
+            body_parts = fieldnames(predictions); % Get the list of body parts
+
+            % Process each body part
+            for k = 1:length(body_parts)
+                part_name = body_parts{k};
+
+                if isfield(agg_predictions, part_name)
+                    if ~strcmp(part_name, 'sampleID')
+                        % Concatenate if the field already exists in agg_predictions
+                        agg_predictions.(part_name) = cat(1, agg_predictions.(part_name), predictions.(part_name));
+                    else
+                        % For sampleID, adjust the values before concatenating
+                        last_sample_id = 0;
+                        if ~isempty(agg_predictions.(part_name))
+                            last_sample_id = agg_predictions.(part_name)(end);
+                        end
+                        agg_predictions.(part_name) = cat(2, agg_predictions.(part_name), predictions.(part_name) + last_sample_id);
+                    end
+                else
+                    % Otherwise, initialize the field in agg_predictions
+                    agg_predictions.(part_name) = predictions.(part_name);
+                end
+            end
+
+            % Update the animal_condition_identifier
+            num_frames_for_current_combo = size(predictions.(body_parts{1}), 1);
+            condition_letter = condition_to_letter(condition);
+            animal_condition_identifier = [animal_condition_identifier; repmat({sprintf('%s_%s', animal_id, condition_letter)}, num_frames_for_current_combo, 1)];
+        end
+    end
     % At this point, agg_predictions contains concatenated body part data for all animals
     % and animal_frames_identifier indicates the animal for each frame.
 
@@ -77,16 +139,16 @@ if run_pred_concat || overwrite_pred_concat
     % predictions = struct();
     predictions = agg_predictions;
     % predictions.predictions = agg_predictions;
-    save(filename_predictions, 'predictions', 'animal_frames_identifier')
+    save(filename_predictions, 'predictions', 'animal_condition_identifier')
 else
     disp('predictions previously concatenated, now loading them')
     load(filename_predictions)
 end
 
 %%
-long_animal_frames_identifier = repelem(animal_frames_identifier,3);
+long_animal_frames_identifier = repelem(animal_condition_identifier,3);
 %% INIT ratception procedure
-filename_ratception = fullfile('D:\test_CAPTURE', "ratception_prediction.mat");
+filename_ratception = fullfile(rootpath, "ratception_prediction.mat");
 
 animal_name = 'mario_mouse22';
 
@@ -94,7 +156,7 @@ input_params = struct();
 input_params.SpineF_marker = 'SpineF';
 input_params.SpineM_marker = 'SpineM';
 % input_params.repfactor = 300/30;
-input_params.repfactor = round(300/120);
+input_params.repfactor = round(300/init_frame_rate);
 input_params.conversion_factor = 1;
 
 % Run prepro if it doesn't exist
@@ -159,17 +221,28 @@ analysisstruct = compute_tsne_features(MLmatobj,mocapstruct,analysisparams);
 
 animal_list_used_after_analysis =  long_animal_frames_identifier(analysisstruct.frames_with_good_tracking{1});
 % analysisstruct.condition_inds = [];
-% for inter animal analysis:
 
-cond_inds = zeros(1,length(analysisstruct.condition_inds));
+% for inter animal analysis:
+animal_list = unique(animal_list_used_after_analysis, 'stable');
+cond_inds = zeros(1,length(analysisstruct.condition_inds)); % sorting per animal
 for iid = 1:length(animal_list)
     animal_ID = animal_list{iid};
-    
     idx = ismember(animal_list_used_after_analysis, animal_ID);
     cond_inds(idx) = iid;
-
 end
+
 % analysisstruct.condition_inds = cond_inds;
+
+% conditions ie. actua conditions, concatenating animals in same cond
+condition_inds = cond_inds; % sorting per condition
+for iff = 1:length(animal_list_used_after_analysis)
+     animal_ID = animal_list_used_after_analysis{iff};
+    condition_inds(iff) = double(endsWith(animal_ID, '_F') +1);
+   
+end
+% analysisstruct.condition_inds = condition_inds;
+% this does not work, see  compute_tsne_features.m line 144
+%% Plot dim red
 zvals_filename = fullfile(roothpath_CAPTURE, 'zvals.mat');
 if ~exist(zvals_filename, 'file') || overwrite_zvals
 
@@ -248,7 +321,8 @@ params.corr_threshold = 0.2;% 0.2
 params.clustercutoff =0.65;%0.12; % 0.65
 analysisstruct.plotdirectory = '';
 %timescale to use, in seconds
-params.timescales = [1./4 2];  % this is in minutes, check the find_sequences_state_demo code 
+% params.timescales = [1./4 2];  % this is in minutes, check the find_sequences_state_demo code 
+params.timescales = [1./4];  % this is in minutes, check the find_sequences_state_demo code 
 % paper 15 s and 12 s -> 1/4, 2 
 % params.timescales = [15, 120]; 
 % params.timescales = [0.1];%[1./4 2]; 
@@ -258,9 +332,12 @@ params.timescales = [1./4 2];  % this is in minutes, check the find_sequences_st
 analysisstruct.conditionnames = {'test'};
 analysisstruct.ratname = {ratname};
 condition =1;
-hierarchystruct=   find_sequences_states_demo(analysisstruct,condition,params);
-% identofy the unique cls
-[seq_cls, seq_c_idx, seq_r] = unique(hierarchystruct.clustered_behavior{1}, 'stable');
+
+% Uncomment this to to sequence analysis
+
+% hierarchystruct=   find_sequences_states_demo(analysisstruct,condition,params);
+% % identofy the unique cls
+% [seq_cls, seq_c_idx, seq_r] = unique(hierarchystruct.clustered_behavior{1}, 'stable');
 
 % h=figure(370);
 % CL = cell(length(seq_c_idx),1);
@@ -281,7 +358,7 @@ if plot_poses
     % h= figure(370);
     % clf;
 
-    figure('pos', [10,300,1500,1900])
+    fig_poses = figure('pos', [10,300,1500,1900]);
     nclus = numel(cls);
     n_rows = ceil(sqrt(nclus));
     n_cols = ceil(sqrt(nclus));
@@ -294,62 +371,118 @@ if plot_poses
         title(this_cls)
     end
 end
+% save cluster plot
+cluster_poses_figure_filename = fullfile(roothpath_CAPTURE, 'Poses_clusters.pdf');
+export_fig(cluster_poses_figure_filename, '-pdf', fig_poses)
 keyboard
 %% save analysis
 save(analysis_filename, 'analysisstruct' , '-v7.3')
 
-%% Do statistics
+%% Do statistics -  this needs to be modified
 % first upsample the animal_frames_identifier to match the  data. take in
 % consideration the factor at the beginning (input.repfactor)
 
-up_sampled_identifier = repelem(animal_frames_identifier, input_params.repfactor);
+up_sampled_identifier = repelem(animal_condition_identifier, input_params.repfactor);
 good_frames_animal_identifier = up_sampled_identifier(analysisstruct.frames_with_good_tracking{1, 1});
 
+ 
 % Assuming clusters are stored in analysisstruct.annot_reordered{end} 
 clusters = analysisstruct.annot_reordered{end};
 
-% Create a mapping between animal ID and condition
-animal_to_condition = containers.Map(animal_list, conditions); 
-
 % Identify the unique clusters
-unique_clusters = unique(clusters, 'stable');
+unique_clusters = unique(clusters);
 
 % Initialize storage for the density of each cluster per condition
-cluster_density_formalin = zeros(size(unique_clusters));
-cluster_density_saline = zeros(size(unique_clusters));
+cluster_density_condition_1 = zeros(size(unique_clusters));
+cluster_density_condition_0 = zeros(size(unique_clusters));
 
 for c = 1:length(unique_clusters)
-    % current_cluster = unique_clusters(c);
-    % cluster_index = find(unique_clusters == current_cluster);
-     cluster_index = unique_clusters(c);
+    cluster_index = unique_clusters(c);
+    
     % Find all frames belonging to the current cluster
-    frames_in_cluster = find(cluster_index == clusters);
+    frames_in_cluster = find(clusters == cluster_index);
     
-    % Identify the animals for these frames
-    animals_in_cluster = good_frames_animal_identifier(frames_in_cluster);
+    % Identify the animal-condition combinations for these frames
+    animal_conditions_in_cluster = good_frames_animal_identifier(frames_in_cluster);
     
-    % Identify the conditions for these animals
-    conditions_in_cluster = values(animal_to_condition, animals_in_cluster);
-    
-    % Compute density for each condition
-    cluster_density_formalin(cluster_index) = sum(strcmp(conditions_in_cluster, 'F')) ;%/ length(conditions_in_cluster);
-    cluster_density_saline(cluster_index) = sum(strcmp(conditions_in_cluster, 'S')) ;%/ length(conditions_in_cluster);
+    % Count frames for each condition
+    cluster_density_condition_1(c) = sum(cellfun(@(x) endsWith(x, '_F'), animal_conditions_in_cluster));
+    cluster_density_condition_0(c) = sum(cellfun(@(x) endsWith(x, '_S'), animal_conditions_in_cluster));
 end
 
-% At this point, cluster_density_formalin and cluster_density_saline
-% contain the densities of each cluster for the respective conditions.
-
-% Calculate the difference in number of frames between formalin and saline for each cluster
-difference_frames = cluster_density_formalin - cluster_density_saline;
+% Calculate the difference in number of frames between condition 1 and 0 for each cluster
+difference_frames = cluster_density_condition_1 - cluster_density_condition_0;
 
 % Create a bar graph
 figure;
 bar(difference_frames);
-title('Difference in Frame Counts: Formalin vs. Saline');
+title('Difference in Frame Counts: Condition 1 vs. Condition 0');
 xlabel('Cluster');
 ylabel('Difference in Frame Counts');
 set(gca, 'XTick', 0:10:length(unique_clusters), 'XTickLabel', arrayfun(@num2str, 0:10:length(unique_clusters), 'UniformOutput', false));
 box off
+
+% Check what are the clusters only in condition 1
+only_condition_1 = find(difference_frames == max(difference_frames));
+to_take = only_condition_1;
+
+figure('pos', [10,300,1500,1900])
+n_rows = ceil(sqrt(numel(to_take)));
+n_cols = ceil(sqrt(numel(to_take)));
+
+for ic = 1:numel(to_take)
+    subplot(n_rows, n_cols, ic)
+    this_cls = to_take(ic);
+    fprintf('ic = %i - \n', this_cls)
+    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+    title(this_cls)
+end
+% % Assuming clusters are stored in analysisstruct.annot_reordered{end} 
+% clusters = analysisstruct.annot_reordered{end};
+% 
+% % Create a mapping between animal ID and condition
+% animal_to_condition = containers.Map(animal_list, conditions); 
+% 
+% % Identify the unique clusters
+% unique_clusters = unique(clusters, 'stable');
+% 
+% % Initialize storage for the density of each cluster per condition
+% cluster_density_formalin = zeros(size(unique_clusters));
+% cluster_density_saline = zeros(size(unique_clusters));
+% 
+% for c = 1:length(unique_clusters)
+%     % current_cluster = unique_clusters(c);
+%     % cluster_index = find(unique_clusters == current_cluster);
+%      cluster_index = unique_clusters(c);
+%     % Find all frames belonging to the current cluster
+%     frames_in_cluster = find(cluster_index == clusters);
+% 
+%     % Identify the animals for these frames
+%     animals_in_cluster = good_frames_animal_identifier(frames_in_cluster);
+% 
+%     % Identify the conditions for these animals
+%     conditions_in_cluster = values(animal_to_condition, animals_in_cluster);
+% 
+%     % Compute density for each condition
+%     cluster_density_formalin(cluster_index) = sum(strcmp(conditions_in_cluster, 'F')) ;%/ length(conditions_in_cluster);
+%     cluster_density_saline(cluster_index) = sum(strcmp(conditions_in_cluster, 'S')) ;%/ length(conditions_in_cluster);
+% end
+% 
+% % At this point, cluster_density_formalin and cluster_density_saline
+% % contain the densities of each cluster for the respective conditions.
+% 
+% % Calculate the difference in number of frames between formalin and saline for each cluster
+% difference_frames = cluster_density_formalin - cluster_density_saline;
+% 
+% % Create a bar graph
+% figure;
+% bar(difference_frames);
+% title('Difference in Frame Counts: Formalin vs. Saline');
+% xlabel('Cluster');
+% ylabel('Difference in Frame Counts');
+% set(gca, 'XTick', 0:10:length(unique_clusters), 'XTickLabel', arrayfun(@num2str, 0:10:length(unique_clusters), 'UniformOutput', false));
+% box off
 
 
 %% if density, check what are the clusters only in formalin
@@ -475,7 +608,7 @@ for c = 1:length(unique_clusters)
     valid_indices = min(indices_in_animal_identifier, length(animal_frames_identifier));
     
     % Getting the animal ids for these indices
-    animals_for_this_cluster = animal_frames_identifier(valid_indices);
+    animals_for_this_cluster = animal_condition_identifier(valid_indices);
     
     cluster_to_animal_map(cluster_id) = animals_for_this_cluster;
 end
@@ -545,3 +678,15 @@ for cluster_id = unique_clusters
     end
 end
 
+
+
+%% Functions
+function letter = condition_to_letter(condition)
+    if strcmp(condition, '0')
+        letter = 'S';
+    elseif strcmp(condition, '1')
+        letter = 'F';
+    else
+        error('Unknown condition: %s', condition);
+    end
+end

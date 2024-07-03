@@ -31,7 +31,8 @@ switch linkname
 %         keyboard
         anglestruct = load_mario_mouse_anglestruct() ;
     case 'mario_mouse22'
-         anglestruct = load_mario_mouse22_anglestruct() ;
+         % anglestruct = load_mario_mouse22_anglestruct() ;
+         anglestruct = load_mario_mouse22_anglestruct_v2() ;
 end
 
 segment_pairs=anglestruct.segment_pairs;

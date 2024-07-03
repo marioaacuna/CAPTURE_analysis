@@ -92,8 +92,8 @@ colors= mocapstruct.markercolor;
 for jj = 1:numel(mocapstruct.markernames)
     % Collect the positions for this marker across all non-empty frames
     marker_positions = cell2mat(cellfun(@(pos) pos(jj, :), positions(nonEmptyFrames), 'UniformOutput', false)');
-    % average_positions(jj, :) = median(marker_positions, 1);  % average along rows (i.e., over frames)
-    average_positions(jj, :) = (marker_positions(1,:,:));  % average along rows (i.e., over frames)
+    average_positions(jj, :) = median(marker_positions, 1);  % average along rows (i.e., over frames)
+    % average_positions(jj, :) = (marker_positions(1,:,:));  % average along rows (i.e., over frames)
 
 end
 hold on

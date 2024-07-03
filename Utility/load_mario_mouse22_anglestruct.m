@@ -133,7 +133,23 @@ anglestruct.planar_trios{14}.name1 = 'elbowr_yaw';
 anglestruct.planar_trios{14}.name2 = 'elbowr_pitch';
 anglestruct.planar_trios{14}.namesuse = [1 2];
 
+%% new elbow yaw and pitch -suggested by LLM Claude
+% 
+% % Left elbow angle
+% anglestruct.planar_trios{13}.plane = {{'ShoulderL','ElbowL'},{'ShoulderR','ShoulderL'}};
+% anglestruct.planar_trios{13}.vector = {'ElbowL','ForepawL'};
+% anglestruct.planar_trios{13}.name1 = 'elbowl_pitch';
+% anglestruct.planar_trios{13}.name2 = 'elbowl_yaw';
+% anglestruct.planar_trios{13}.namesuse = [1 2];
+% 
+% % Right elbow angle
+% anglestruct.planar_trios{14}.plane = {{'ShoulderR','ElbowR'},{'ShoulderL','ShoulderR'}};
+% anglestruct.planar_trios{14}.vector = {'ElbowR','ForepawR'};
+% anglestruct.planar_trios{14}.name1 = 'elbowr_pitch';
+% anglestruct.planar_trios{14}.name2 = 'elbowr_yaw';
+% anglestruct.planar_trios{14}.namesuse = [1 2];
 
+%%
 % anglestruct.planar_trios{13}.plane = {{'SpineM','SpineF'},{'ShoulderR','ShoulderL'}};
 % anglestruct.planar_trios{13}.vector = {'ShoulderL','ElbowL'};
 % anglestruct.planar_trios{13}.name1 = 'elbowl_yaw';
