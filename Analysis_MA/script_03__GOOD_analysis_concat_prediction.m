@@ -218,7 +218,7 @@ else
 end
 
 %%
-analysisparams.tsnegranularity = 50;% 50:default ;120; 250(1.5, corr_thr) ; 100(1.5)- very detailed; 100(2.5)-very good
+analysisparams.tsnegranularity = 25;% 50:default ;120; 250(1.5, corr_thr) ; 100(1.5)- very detailed; 100(2.5)-very good
 % Mario: it seems that high number of frames (between 100 - 120) yield better results
 
 %subselect a particular set of features
@@ -249,7 +249,7 @@ end
 % this does not work, see  compute_tsne_features.m line 144
 %% Plot dim red
 zvals_filename = fullfile(roothpath_CAPTURE, 'zvals.mat');
-perplexity = 250; % 75;
+perplexity = 200; % 75;
 
 if ~exist(zvals_filename, 'file') || overwrite_zvals
 
@@ -474,7 +474,7 @@ predominantS = find(clusterProportions(:, 1) > threshold);
 predominantF = find(clusterProportions(:, 2) > threshold);
 
 to_take = predominantF;
-figure('pos', [10,300,1500,1900])
+fig_predominant = figure('pos', [10,300,1500,1900]);
 n_rows = ceil(sqrt(numel(to_take)));
 n_cols = ceil(sqrt(numel(to_take)));
 
@@ -486,6 +486,10 @@ for ic = 1:numel(to_take)
         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
     title(this_cls)
 end
+% title('Predominant pain frames')
+pain_frames_fig = fullfile(roothpath_CAPTURE,'Predominant_pain_frames.pdf');
+export_fig(pain_frames_fig, '-pdf', fig_predominant)
+
 
 %%
 
