@@ -18,7 +18,7 @@ set(h,'Color','k')
 xx = squeeze(mocapstruct.markers_aligned_preproc.(mocapstruct.markernames{1})(1,1));
 yy = squeeze(mocapstruct.markers_aligned_preproc.(mocapstruct.markernames{1})(1,2));
 zz = squeeze(mocapstruct.markers_aligned_preproc.(mocapstruct.markernames{1})(1,3));
-handle_base = line(xx,yy,zz,'Marker','o','Color',mocapstruct.markercolor{1},'MarkerFaceColor',mocapstruct.markercolor{1},'MarkerSize',6);
+handle_base = line(xx,yy,zz,'Marker','o','Color',mocapstruct.markercolor{1},'MarkerFaceColor',mocapstruct.markercolor{1},'MarkerSize',2);
 
 
 ax = gca;
@@ -29,9 +29,13 @@ set(gca,'Xcolor',[1 1 1 ]);
 set(gca,'Ycolor',[1 1 1]);
 set(gca,'Zcolor',[1 1 1]);
 
-zlim([-110 170])
-xlim([-140 140])
-ylim([-140 140])
+% zlim([-110 170])
+% xlim([-140 140])
+% ylim([-140 140])
+zlim([-20 50])
+xlim([-80 80])
+ylim([-80 80])
+
 
 
 %     zlim([-210 270])
@@ -40,8 +44,8 @@ ylim([-140 140])
 %
 
 set(gca,'XTickLabels',[],'YTickLabels',[],'ZTickLabels',[])
-view([-22, 12]);
-fprintf('n frames %i \n',numel(frame_inds));
+view([-2, 12]);
+% fprintf('n frames %i \n',numel(frame_inds));
 
 for lk = reshape(frame_inds,1,[])%1:10:10000
    
@@ -64,7 +68,7 @@ for lk = reshape(frame_inds,1,[])%1:10:10000
                 xx = squeeze(mocapstruct.markers_aligned_preproc.(mocapstruct.markernames{jj})(ind_to_plot,1));
                 yy = squeeze(mocapstruct.markers_aligned_preproc.(mocapstruct.markernames{jj})(ind_to_plot,2));
                 zz = squeeze(mocapstruct.markers_aligned_preproc.(mocapstruct.markernames{jj})(ind_to_plot,3));
-                handles_here{jj} = line(xx,yy,zz,'Marker','o','Color',mocapstruct.markercolor{jj},'MarkerFaceColor',mocapstruct.markercolor{jj},'MarkerSize',9);
+                handles_here{jj} = line(xx,yy,zz,'Marker','o','Color',mocapstruct.markercolor{jj},'MarkerFaceColor',mocapstruct.markercolor{jj},'MarkerSize',2);
 
 
 

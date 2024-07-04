@@ -18,7 +18,7 @@ if ispc
     % so far for these test, we have the data on local drive D
     rootpath = 'D:\CAPTURE';
 else
-    rootpath = '/Users/mario/Library/CloudStorage/OneDrive-UniversitaetBern/Coding_playground/CAPTURE_temp_data_mac';
+    rootpath = '/Users/mario/Library/Mobile Documents/com~apple~CloudDocs/_todo/SpontaneousPainProject/240704_data'; % I have updated where the files are to gather them more quickly
 end
 
 if ~exist("rootpath", 'dir'), mkdir(rootpath); end
@@ -470,8 +470,8 @@ clusterProportions = clusterComposition ./ totalFrames;
 
 % Identify predominantly associated clusters
 threshold = 0.75;  % Define threshold for "predominant" association
-predominantS = find(clusterProportions(:, 1) > threshold);
-predominantF = find(clusterProportions(:, 2) > threshold);
+predominantS = find(clusterProportions(:, 2) >= threshold);
+predominantF = find(clusterProportions(:, 1) >= threshold);
 
 to_take = predominantF;
 fig_predominant = figure('pos', [10,300,1500,1900]);
