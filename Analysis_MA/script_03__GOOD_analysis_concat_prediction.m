@@ -279,7 +279,7 @@ set(gcf, 'color', 'w')
 disp('%% INIT clustering %%')
 analysisstruct.zValues = zvals;
 analysisstruct.params.density_res = 1001; %resolution of the map
-analysisstruct.params.density_width = 2;%default:3; 2; %density kernel in tsne space 0.5 for pca; 2.5 tsne .  !! 5 so far works well
+analysisstruct.params.density_width = 1.5;%default:3; 2; %density kernel in tsne space 0.5 for pca; 2.5 tsne .  !! 5 so far works well
 analysisstruct.params.expansion_factor = 1.1; %add a little room to the map after kernel smoothing
 analysisstruct.params.density_threshold = 1*10^(-5); %remove regions in plots with low density
 analysisstruct.matchedconds = {[unique(analysisstruct.condition_inds)]}; %if running over multiple conditions
@@ -445,22 +445,22 @@ ylabel('Difference in Frame Counts');
 set(gca, 'XTick', 0:10:length(unique_clusters), 'XTickLabel', arrayfun(@num2str, 0:10:length(unique_clusters), 'UniformOutput', false));
 box off
 
-% Check what are the clusters only in condition 1
-only_condition_1 = find(difference_frames == max(difference_frames));
-to_take = only_condition_1;
-
-figure('pos', [10,300,1500,1900])
-n_rows = ceil(sqrt(numel(to_take)));
-n_cols = ceil(sqrt(numel(to_take)));
-
-for ic = 1:numel(to_take)
-    subplot(n_rows, n_cols, ic)
-    this_cls = to_take(ic);
-    fprintf('ic = %i - \n', this_cls)
-    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
-        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
-    title(this_cls)
-end
+% % Check what are the clusters only in condition 1
+% only_condition_1 = find(difference_frames == max(difference_frames));
+% to_take = only_condition_1;
+% 
+% figure('pos', [10,300,1500,1900])
+% n_rows = ceil(sqrt(numel(to_take)));
+% n_cols = ceil(sqrt(numel(to_take)));
+% 
+% for ic = 1:numel(to_take)
+%     subplot(n_rows, n_cols, ic)
+%     this_cls = to_take(ic);
+%     fprintf('ic = %i - \n', this_cls)
+%     plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+%         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+%     title(this_cls)
+% end
 
 
 %% new
@@ -469,7 +469,7 @@ totalFrames = sum(clusterComposition, 2);
 clusterProportions = clusterComposition ./ totalFrames;
 
 % Identify predominantly associated clusters
-threshold = 0.75;  % Define threshold for "predominant" association
+threshold = 0.95;  % Define threshold for "predominant" association
 predominantS = find(clusterProportions(:, 2) >= threshold);
 predominantF = find(clusterProportions(:, 1) >= threshold);
 
@@ -488,9 +488,10 @@ for ic = 1:numel(to_take)
 end
 % title('Predominant pain frames')
 pain_frames_fig = fullfile(roothpath_CAPTURE,'Predominant_pain_frames.pdf');
+%%
 export_fig(pain_frames_fig, '-pdf', fig_predominant)
 
-
+keyboard
 %%
 
 % % Assuming clusters are stored in analysisstruct.annot_reordered{end}
@@ -541,23 +542,23 @@ export_fig(pain_frames_fig, '-pdf', fig_predominant)
 
 
 %% if density, check what are the clusters only in formalin
-only_formalin = find(difference_frames ==1);
-to_take = only_formalin;
-figure('pos', [10,300,1500,1900])
-nclus = numel(31);
-n_rows = ceil(sqrt(numel(to_take)));
-n_cols = ceil(sqrt(numel(to_take)));
-for ic = 1:numel(to_take)
-    subplot(n_rows, n_cols, ic)
-    this_cls = to_take(ic);
-    fprintf('ic = %i - \n', this_cls)
-    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
-        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
-    title(this_cls)
-end
+% only_formalin = find(difference_frames ==1);
+% to_take = only_formalin;
+% figure('pos', [10,300,1500,1900])
+% nclus = numel(31);
+% n_rows = ceil(sqrt(numel(to_take)));
+% n_cols = ceil(sqrt(numel(to_take)));
+% for ic = 1:numel(to_take)
+%     subplot(n_rows, n_cols, ic)
+%     this_cls = to_take(ic);
+%     fprintf('ic = %i - \n', this_cls)
+%     plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+%         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+%     title(this_cls)
+% end
 
 
-%% animal per animal stats
+%% animal per animal stats -  works so far
 % Number of animals
 num_animals = length(animal_list);
 
@@ -582,52 +583,98 @@ for a = 1:num_animals
 end
 
 % Indices for formalin and saline treated animals
-formalin_indices = find(strcmp(conditions, 'F'));
-saline_indices = find(strcmp(conditions, 'S'));
+final_conditions = {'S', 'F', 'S', 'F','S', 'F', 'S', 'F'};
+formalin_indices = find(strcmp(final_conditions, 'F'));
+saline_indices = find(strcmp(final_conditions, 'S'));
 
 p_values = zeros(1, length(unique_clusters));
 
 for c = 1:length(unique_clusters)
     this_c = unique_clusters(c);
     % Perform a two-sample t-test comparing formalin and saline densities for this cluster
-    [~, p_values(this_c)] = ttest2(density_per_animal(formalin_indices, this_c), density_per_animal(saline_indices, this_c));
+    [~, p_values(this_c)] = ttest(density_per_animal(formalin_indices, this_c), density_per_animal(saline_indices, this_c));
 end
 
 % Correct for multiple comparisons (optional but recommended)
-corrected_p_values = mafdr(p_values, 'BHFDR', true);
+% corrected_p_values = mafdr(p_values, 'BHFDR', true);
+
+% Calculate means
+mean_F = mean(density_per_animal(formalin_indices,:));
+mean_S = mean(density_per_animal(saline_indices,:));
+
+% Calculate SEMs
+sem_F = std(density_per_animal(formalin_indices,:)) / sqrt(length(formalin_indices));
+sem_S = std(density_per_animal(saline_indices,:)) / sqrt(length(saline_indices));
+
+% Create the figure
+fig_count = figure;
+
+% Plot bars with alpha 0.5
+b1 = bar(1:length(mean_F), mean_F, 'FaceColor', [1 0 0 ], 'EdgeColor', 'none', 'FaceAlpha',0.5);
+hold on;
+b2 = bar(1:length(mean_S), mean_S, 'FaceColor', [0 0 1 ], 'EdgeColor', 'none','FaceAlpha',0.5);
+
+% Add error bars
+errorbar(1:length(mean_F), mean_F, sem_F, 'k', 'linestyle', 'none');
+errorbar(1:length(mean_S), mean_S, sem_S, 'k', 'linestyle', 'none');
+
+% Customize the plot
+xlabel('Cluster');
+ylabel('Count');
+title('Cluster Density Comparison: Formalin vs Saline');
+legend([b1 b2], {'Formalin', 'Saline'});
+
+% Adjust x-axis if needed
+set(gca, 'XTick', 1:length(mean_F));
+set(gca, 'TickDir','out')
+
+% Optional: add grid
+grid off;
+box off;
+
+
 sig_cls = find(p_values<0.05);
 hold on
-plot(sig_cls, repmat(0, size(sig_cls)), '*')
+plot(sig_cls, repmat(0, size(sig_cls)), 'r*')
 hold off
 
-%% Plot significant cls
-figure('pos', [10,300,1500,1900])
-nclus = numel(sig_cls);
-n_rows = ceil(sqrt(numel(sig_cls)));
-n_cols = ceil(sqrt(numel(sig_cls)));
-for ic = 1:numel(sig_cls)
-    subplot(n_rows, n_cols, ic)
-    this_cls = sig_cls(ic);
-    fprintf('ic = %i - \n', this_cls)
-    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
-        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
-    title(this_cls)
-end
+% title('Predominant pain frames')
+pain_frames_fig = fullfile(roothpath_CAPTURE,'Cluster_Count_number_F_vs_S.pdf');
+%%
+export_fig(pain_frames_fig, '-pdf', fig_count)
 
-%% Plot cls after thr
-to_take = find(difference_frames >200);
-figure('pos', [10,300,1500,1900])
-nclus = numel(31);
-n_rows = ceil(sqrt(numel(to_take)));
-n_cols = ceil(sqrt(numel(to_take)));
-for ic = 1:numel(to_take)
-    subplot(n_rows, n_cols, ic)
-    this_cls = to_take(ic);
-    fprintf('ic = %i - \n', this_cls)
-    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
-        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
-    title(this_cls)
-end
+
+% %% Plot significant cls
+% figure('pos', [10,300,1500,1900])
+% nclus = numel(sig_cls);
+% n_rows = ceil(sqrt(numel(sig_cls)));
+% n_cols = ceil(sqrt(numel(sig_cls)));
+% for ic = 1:numel(sig_cls)
+%     subplot(n_rows, n_cols, ic)
+%     this_cls = sig_cls(ic);
+%     fprintf('ic = %i - \n', this_cls)
+%     plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+%         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+%     title(this_cls)
+% end
+
+% %% Plot cls after thr
+% to_take = find(difference_frames >200);
+% figure('pos', [10,300,1500,1900])
+% nclus = numel(31);
+% n_rows = ceil(sqrt(numel(to_take)));
+% n_cols = ceil(sqrt(numel(to_take)));
+% for ic = 1:numel(to_take)
+%     subplot(n_rows, n_cols, ic)
+%     this_cls = to_take(ic);
+%     fprintf('ic = %i - \n', this_cls)
+%     plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+%         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+%     title(this_cls)
+% end
+
+
+%%
 
 %% get the videoframes for the clusters
 clusters_to_frames_map = containers.Map('KeyType','double','ValueType','any');
