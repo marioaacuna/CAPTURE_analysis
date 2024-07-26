@@ -49,7 +49,7 @@ function GC = general_configs()
 
     %% Allocate variables
     GC.temp_root                = temp_root; 
-    GC.data_rootpath            = data_rootpath;
+    GC.project_path             = project_path;
     GC.preprocessing_rootpath   = preprocessing_rootpath;
     GC.postprocessing_rootpath  = postprocessing_rootpath;
     GC.figure_folder            = figure_folder;
@@ -66,14 +66,31 @@ function GC = general_configs()
     GC.R.scripts_path = fullfile(GC.repository_root_path, 'Code', 'R');
 
     
-    %% PREPROCESSING   
-   
+    %% PREPROCESSING 
+    % file names
+    GC.filename_analysis    = fullfile(preprocessing_rootpath,'raw_concat_analysis.mat' );
+    GC.filename_predictions = fullfile(preprocessing_rootpath, 'agg_predictions.mat');
+    GC.filename_ratception  = fullfile(preprocessing_rootpath, 'ratception_prediction.mat');
+    % Vars
+    GC.frame_rate           = 100; % Original video recordings FR  
+    GC.ratception_name      = 'mario_mouse22';
+    GC.linkname             = 'mario_mouse22';
+    GC.repfactor            = 3; % Repetition factor for the video; round(300/init_frame_rate)
+    GC.tsnegranularity      = 25;
+    GC.perplexity           = 200;
+
+    % Clustering
+    GC.density_res          = 1001; %resolution of the map
+    GC.density_width        = 1;%this depends on the number of frames and how data is clustered, 1 works well.
+    GC.expansion_factor     = 1.1; %add a little room to the map after kernel smoothing
+    GC.density_threshold    = 1*10^(-5); %remove regions in plots with low density
     %% PLOTS
-   
+    
     % Set plotting options for graphs made in python
     GC.python.font_size_labels  = 16;
     GC.python.scatterplot_small = 7;
     GC.python.scatterplot_large = 10;
+
     
     
     

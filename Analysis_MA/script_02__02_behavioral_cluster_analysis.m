@@ -27,34 +27,30 @@
 clear;
 close all;
 clc;
+GC = general_configs;
+rootpath = GC.preprocessing_rootpath;
 
-% Set root path based on operating system
-if ispc
-    rootpath = 'D:\CAPTURE';
-else
-    rootpath = '/Users/mario/Library/Mobile Documents/com~apple~CloudDocs/_todo/SpontaneousPainProject/240704_data'; % I have updated where the files are to gather them more quickly
-end
 
 % File paths
-analysis_filename = fullfile(rootpath, 'raw_concat_analysis.mat');
-predictions_filename = fullfile(rootpath, 'agg_predictions.mat');
-ratception_filename = fullfile(rootpath, 'ratception_prediction.mat');
+% analysis_filename = fullfile(rootpath, 'raw_concat_analysis.mat');
+% predictions_filename = fullfile(rootpath, 'agg_predictions.mat');
+% ratception_filename = fullfile(rootpath, 'ratception_prediction.mat');
 
 %% Load Data
 % Load analysis structure
-load(analysis_filename, 'analysisstruct');
+load(GC.filename_analysis, 'analysisstruct');
 
 % Load predictions
-load(predictions_filename, 'predictions', 'animal_condition_identifier');
+load(GC.filename_predictions, 'predictions', 'animal_condition_identifier');
 
 % Load ratception structure
-load(ratception_filename, 'ratception_struct');
+load(GC.filename_ratception, 'ratception_struct');
 
 %% 1. Cluster Composition Analysis
 disp('Performing Cluster Composition Analysis...');
 %% Prepare Data
 % Upsample animal_condition_identifier
-input_params.repfactor = 3;
+input_params.repfactor = GC.repfactor;
 % input_params = analysisstruct.input_params;
 upsampled_identifiers = repelem(animal_condition_identifier, input_params.repfactor);
 
@@ -133,8 +129,8 @@ currentX = 1; % Starting x position for the first bar
 p_values = struct();
 t_statistics = struct();
 
-for i = 1:length(clusters)
-    cluster_name = ['id_',num2str(clusters(i))];
+for i = 1:length(unique_clusters)
+    cluster_name = ['id_',num2str(unique_clusters(i))];
     data_S = cluster_proportions_S(:, i);
     data_F = cluster_proportions_F(:, i);
 
@@ -184,7 +180,7 @@ xlabel('Cluster ID', 'FontSize', 14);
 ylabel('Mean Proportion', 'FontSize', 14);
 title('Cluster Proportions in Control (S) and Pain (F) Conditions', 'FontSize', 16);
 % legend({'Control (S)', 'Pain (F)'}, 'Location', 'Best', 'FontSize', 12);
-set(gca, 'XTick', 1:barWidth*2+gapWidth:currentX-gapWidth, 'XTickLabel', clusters, 'FontSize', 12);
+set(gca, 'XTick', 1:barWidth*2+gapWidth:currentX-gapWidth, 'XTickLabel', unique_clusters, 'FontSize', 12);
 xlim([0, currentX-gapWidth]);
 ylim([0, max(max(mean(cluster_proportions_S)), max(mean(cluster_proportions_F))) * 1.3]);  % Adjust y-axis to accommodate stars
 set(gca, 'TickDir', 'out');
@@ -199,7 +195,7 @@ hold off;
 
 % Save the figure
 % export_fig(fullfile(rootpath,'figures', 'cluster_proportions_comparison.pdf'), '-pdf', fig_prop)
-saveas(fig_prop, fullfile(rootpath,'figures', 'cluster_proportions_comparison.fig'));
+saveas(fig_prop, fullfile(GC.figure_folder, 'cluster_proportions_comparison.fig'));
 
 
 %% Save Results
