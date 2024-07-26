@@ -271,7 +271,7 @@ totalFrames = sum(clusterComposition, 2);
 clusterProportions = clusterComposition ./ totalFrames;
 
 % Identify predominantly associated clusters
-threshold = 0.75;  % Define threshold for "predominant" association
+threshold = 0.99;  % Define threshold for "predominant" association
 predominantF = find(clusterProportions(:, 1) >= threshold);
 predominantS = find(clusterProportions(:, 2) >= threshold);
 
