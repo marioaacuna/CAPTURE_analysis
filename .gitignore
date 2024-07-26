@@ -47,7 +47,9 @@ $RECYCLE.BIN/
 *.asv
 !setup.cfg
 !cfg/yolov3*.cfg
-*.txt
+**/gs_font_path.txt
+**/export_fig/.ignore/
+
 
 storage.googleapis.com
 runs/*
@@ -291,4 +293,4 @@ fabric.properties
 
 # Vs code
 *.vscode
-/3rd party toolboxes/_plotting/export_fig/.ignore/gs_font_path.txt
+
