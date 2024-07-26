@@ -490,7 +490,9 @@ end
 pain_frames_fig = fullfile(roothpath_CAPTURE,'Predominant_pain_frames.pdf');
 %%
 export_fig(pain_frames_fig, '-pdf', fig_predominant)
-
+% save predominant F frames
+predominant_frames_filename = fullfile(roothpath_CAPTURE,'Predominant_pain_frames.mat');
+save(predominant_frames_filename, "predominantF")
 keyboard
 %%
 
