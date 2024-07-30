@@ -79,7 +79,8 @@ if ~density_plot
             idx = find(analysisstruct.annot_reordered{end, end} == current_cluster);
 
             if numel(idx) > plotthresh
-                if current_cluster == CLUSTER_ID
+                if any(ismember(CLUSTER_ID , current_cluster))
+                    %current_cluster== CLUSTER_ID
                     % Highlight the specific cluster
                     plot(analysisstruct.zValues(idx, 1), ...
                         analysisstruct.zValues(idx, 2), ...
@@ -135,11 +136,24 @@ if ~density_plot
     if (wshedflag)
         % If you want to display the cluster number
         if wshedflag
-            s2 = regionprops(analysisstruct.sorted_watershed, 'Centroid');
-            c = s2(CLUSTER_ID).Centroid;
-            text(analysisstruct.xx(floor(c(1))), analysisstruct.yy(floor(c(2))), num2str(CLUSTER_ID), ...
-                'HorizontalAlignment', 'center', ...
-                'VerticalAlignment', 'middle', 'Color', 'y', 'FontWeight', 'Bold', 'FontSize', 50);
+            if length(CLUSTER_ID) > 1
+                s2 = regionprops(analysisstruct.sorted_watershed, 'Centroid');
+                for cli = 1: length(CLUSTER_ID)
+                    
+                    c = s2(CLUSTER_ID(cli)).Centroid;
+                    text(analysisstruct.xx(floor(c(1))), analysisstruct.yy(floor(c(2))), num2str(CLUSTER_ID(cli)), ...
+                        'HorizontalAlignment', 'center', ...
+                        'VerticalAlignment', 'middle', 'Color', 'y', 'FontWeight', 'Bold', 'FontSize', 25);
+                end
+            else
+
+    
+                s2 = regionprops(analysisstruct.sorted_watershed, 'Centroid');
+                c = s2(CLUSTER_ID).Centroid;
+                text(analysisstruct.xx(floor(c(1))), analysisstruct.yy(floor(c(2))), num2str(CLUSTER_ID), ...
+                    'HorizontalAlignment', 'center', ...
+                    'VerticalAlignment', 'middle', 'Color', 'y', 'FontWeight', 'Bold', 'FontSize', 50);
+            end
         end
 
 

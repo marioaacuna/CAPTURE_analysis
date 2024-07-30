@@ -198,14 +198,6 @@ hold off;
 saveas(fig_prop, fullfile(GC.figure_folder, 'cluster_proportions_comparison.fig'));
 
 
-%% Save Results
-results = struct();
-results.cluster_proportions_S = cluster_proportions_S;
-results.cluster_proportions_F = cluster_proportions_F;
-results.p_values = p_values;
-results.mean_differences = mean_diff;
-
-save(fullfile(rootpath, 'cluster_analysis_results.mat'), 'results');
 
 %% 2. Visualization of significant clusters
 to_take = clusters(p_values_all < 0.05 & mean_diff > 0);
@@ -284,6 +276,19 @@ for ic = 1:numel(to_take)
         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
     title(this_cls)
 end
+
+
+%% Save Results
+results = struct();
+results.cluster_proportions_S = cluster_proportions_S;
+results.cluster_proportions_F = cluster_proportions_F;
+results.p_values = p_values;
+results.mean_differences = mean_diff;
+results.predominantF = predominantF;
+results.predominantS = predominantS;
+
+
+save(fullfile(rootpath, 'cluster_analysis_results.mat'), 'results');
 
 
 %% 2. Temporal Analysis

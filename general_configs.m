@@ -18,7 +18,7 @@ function GC = general_configs()
         project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\';
     else
         mac_name = 'marioacuna';
-        project_path =  fullfile('Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
+        project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
         if ~exist(project_path, 'dir')
             mac_name = 'mario';
             project_path =  fullfile('Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
