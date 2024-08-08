@@ -33,6 +33,7 @@ ratception_struct_full =[];
 filelength=0;
 
 for rk =1:ceil(totalsize/chunksize)
+    disp(['chunk ', num2str(rk), ' from ', num2str(ceil(totalsize/chunksize))])
     ratception_struct_temp = ratception_structtemp;
     for ll = 1:numel(markernames)
         ratception_struct_temp.markers.(markernames{ll}) = ...

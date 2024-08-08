@@ -26,8 +26,14 @@ marker_position = zeros(num_markers,marker_frame_length,3);
 abs_velocity_antialiased = zeros(num_markers,marker_frame_length);
 
 
-dH = designfilt('lowpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', 60/(fps/2), ...
+% dH = designfilt('lowpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', 60/(fps/2), ...
+%     'DesignMethod', 'butter');
+% 
+
+dH = designfilt('lowpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', 30/(fps/2), ...
     'DesignMethod', 'butter');
+
+
 [f1,f2] = tf(dH);
 
 %delta_markers_reshaped = [];
@@ -46,7 +52,8 @@ for ll = 1:numel(marker_names)
     marker_velocity(ll,frames_to_mask,4) = 0;
     abs_velocity_antialiased(ll,:) =  filtfilt(f1,f2, marker_velocity(ll,:,4));
     marker_velocity(ll,frames_to_mask,4) = nan;
-    abs_velocity_antialiased(ll,frames_to_mask)
+    abs_velocity_antialiased(ll,frames_to_mask) = nan;
+    
     for lk = (ll+1):num_markers
         distance_here =   (markers_preproc.(marker_names{ll})-markers_preproc.(marker_names{lk}));
     end
@@ -74,7 +81,9 @@ if numel(fieldnames(markers))>3
     
     %% get rest/move
     %% get move/not move with a simple threshold -- this is improved below
-    veltrace = (conv(abs_velocity_antialiased(5,:),ones(1,300)./300,'same'));
+    % veltrace = (conv(abs_velocity_antialiased(5,:),ones(1,300)./300,'same'));
+    % does this depends on the FPS?
+    veltrace = (conv(abs_velocity_antialiased(5,:),ones(1,(fps))./(fps),'same'));
     vel_thresh = preprocessing_parameters.moving_threshold;
     
     frames_move_old = find(veltrace>vel_thresh);
@@ -91,7 +100,7 @@ if numel(fieldnames(markers))>3
     frames_rest_fast = find(veltrace<=vel_thresh_fast);
     
     fprintf('Old frames moving %f frames resting %f \n',numel(frames_move_old),numel(frames_rest_old));
-    fprintf('NEW Frames moving %f frames resting %f frames move fast \n',numel(frames_move),numel(frames_rest),numel(frames_move_fast));
+    fprintf('NEW Frames moving %f frames resting %f frames move fast %f \n',numel(frames_move),numel(frames_rest),numel(frames_move_fast));
     
     
     %             move_frames = zeros(1,numel(veltrace));

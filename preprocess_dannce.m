@@ -95,8 +95,8 @@ preprocessing_parameters.bad_frame_surround_number = 1;
 preprocessing_parameters.interpolation_max_length = 5;
 preprocessing_parameters.meanvelocity_lowpass = 60;
 preprocessing_parameters.meanvelocity_lowpass = 60;
-preprocessing_parameters.fastvelocity_threshold = 0.1;% 0.1;
-preprocessing_parameters.moving_threshold = 0.015;%0.015; m = 0.00001
+preprocessing_parameters.fastvelocity_threshold = 0.2;% 0.1; this is the effective threshold to sort moving frames
+preprocessing_parameters.moving_threshold = 0.00;%0.015; m = 0.00001
 preprocessing_parameters.moving_framewindow = 600;
 
 % the difference in framerate between the video and the canonical motion capture

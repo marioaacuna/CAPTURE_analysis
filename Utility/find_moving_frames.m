@@ -27,7 +27,7 @@ params.gaussorder = 2.5;
 av_vel_head(isnan(av_vel_head)) = 0;
 
 [av_vel_trunk,vel_comps,av_std,std_comps,av_accel,accel_comps,av_std_accel,std_comps_accel] = ...
-    get_markersubgroup_velocity(markers_preproc,[4,5,6,7,8],params);
+    get_markersubgroup_velocity(markers_preproc,[4,5,6],params); % 4,5,6,7,8
 av_vel_trunk(isnan(av_vel_trunk)) = 0;
 
 [av_vel_hips,vel_comps,av_std,std_comps,av_accel,accel_comps,av_std_accel,std_comps_accel] = ...
@@ -64,9 +64,9 @@ loglog(xspace,n)
 end
 if nargin <3 || velonly == 0
 %thresh = 0.1;
-thresh = preprocessing_parameters.fastvelocity_threshold;
+%thresh = preprocessing_parameters.fastvelocity_threshold;
 % MA:
-% thresh = preprocessing_parameters.moving_threshold;
+thresh = preprocessing_parameters.moving_threshold;
 
 fastframes = find(filteredvelocity>thresh);
 nonfastframes = setxor(1:numel(filteredvelocity),fastframes);

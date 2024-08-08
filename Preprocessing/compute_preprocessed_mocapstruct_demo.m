@@ -26,8 +26,14 @@ marker_position = zeros(num_markers,marker_frame_length,3);
 abs_velocity_antialiased = zeros(num_markers,marker_frame_length);
 
 
-dH = designfilt('lowpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', 60/(fps/2), ...
+% dH = designfilt('lowpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', 60/(fps/2), ...
+%     'DesignMethod', 'butter');
+% 
+
+dH = designfilt('lowpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', 30/(fps/2), ...
     'DesignMethod', 'butter');
+
+
 [f1,f2] = tf(dH);
 
 %delta_markers_reshaped = [];
@@ -75,7 +81,9 @@ if numel(fieldnames(markers))>3
     
     %% get rest/move
     %% get move/not move with a simple threshold -- this is improved below
-    veltrace = (conv(abs_velocity_antialiased(5,:),ones(1,300)./300,'same'));
+    % veltrace = (conv(abs_velocity_antialiased(5,:),ones(1,300)./300,'same'));
+    % does this depends on the FPS?
+    veltrace = (conv(abs_velocity_antialiased(5,:),ones(1,(fps))./(fps),'same'));
     vel_thresh = preprocessing_parameters.moving_threshold;
     
     frames_move_old = find(veltrace>vel_thresh);
