@@ -29,8 +29,8 @@ set(gca,'Color','k')
 % set(gca,'Ycolor',[1 1 1]);
 % set(gca,'Zcolor',[1 1 1]);
 % 
-zlim([-20 50])
-xlim([-40 50])
+zlim([-50 75])
+xlim([-55 55])
 ylim([-50 50])
 
 
@@ -41,6 +41,7 @@ ylim([-50 50])
 
 % set(gca,'XTickLabels',[],'YTickLabels',[],'ZTickLabels',[])
 view([-22, 12]);
+% view([-25, 20]);
 % fprintf('n frames %i \n',numel(frame_inds));
 positions = cell(1, numel(frame_inds));
 for lk = reshape(frame_inds,1,[])%1:10:10000
@@ -60,8 +61,11 @@ for lk = reshape(frame_inds,1,[])%1:10:10000
     % Initialize a 3D matrix to store the positions
     positions{lk} = zeros(numel(mocapstruct.markernames), 3);
 
+    % drop tail end
+    tail_end_jj = find(ismember(mocapstruct.markernames, 'Tail_end_' ));
     % Loop over each marker
     for jj = 1:numel(mocapstruct.markernames)
+        if jj  == tail_end_jj, continue, end
         % don't plot markers that drop out
         if ~isnan(sum(mocapstruct.markers_preproc.(mocapstruct.markernames{jj})(ind_to_plot,:),2))
             if (~sum(mocapstruct.markers_preproc.(mocapstruct.markernames{jj})(ind_to_plot,:),2) == 0)
@@ -90,6 +94,7 @@ nonEmptyFrames = ~cellfun(@isempty, positions);
 colors= mocapstruct.markercolor;
 % Compute the average position for each marker across all frames
 for jj = 1:numel(mocapstruct.markernames)
+    if jj  == tail_end_jj, continue, end
     % Collect the positions for this marker across all non-empty frames
     marker_positions = cell2mat(cellfun(@(pos) pos(jj, :), positions(nonEmptyFrames), 'UniformOutput', false)');
     average_positions(jj, :) = median(marker_positions, 1);  % average along rows (i.e., over frames)
@@ -100,13 +105,14 @@ hold on
 
 % plot
 for ijj = 1:length(average_positions)
+    if ijj  == tail_end_jj, continue, end
     scatter3(average_positions(ijj,1), average_positions(ijj,2), average_positions(ijj,3),3, 'MarkerFaceColor', colors{ijj}, 'MarkerEdgeColor','none')
 end
 %%
 
 %% plot the links between markers
 for mm = 1:numel(mocapstruct.links)
-
+    if mm ==8, continue, end
     xx = [squeeze(average_positions(mocapstruct.links{mm}(1),1))...
         squeeze(average_positions(mocapstruct.links{mm}(2),1))];
     yy = [squeeze(average_positions(mocapstruct.links{mm}(1),2))...

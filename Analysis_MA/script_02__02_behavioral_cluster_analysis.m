@@ -264,7 +264,7 @@ predominantF = find(clusterProportions(:, 1) >= threshold);
 predominantS = find(clusterProportions(:, 2) >= threshold);
 
 to_take = predominantF;
-fig_predominant = figure('pos', [10,300,1500,1900]);
+fig_predominant = figure('pos', [10,10,2056,1350], 'color','w');
 n_rows = ceil(sqrt(numel(to_take)));
 n_cols = ceil(sqrt(numel(to_take)));
 
@@ -276,6 +276,8 @@ for ic = 1:numel(to_take)
         find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
     title(this_cls)
 end
+predominat_figure_name = fullfile(GC.figure_folder, 'predominant_F.pdf');
+export_fig(predominat_figure_name, '-pdf', fig_predominant)
 
 
 %% Save Results
