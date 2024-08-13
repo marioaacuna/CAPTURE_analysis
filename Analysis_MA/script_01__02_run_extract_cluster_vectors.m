@@ -90,7 +90,7 @@ for animal_idx = 1:length(animal_list)
     animal_ID = animal_list{animal_idx};
     clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstruct, upsamplig_factor, conditions);
     % store the clusters in a sturcture
-    animal_ID_in_struct = ['JH_', animal_ID];
+    animal_ID_in_struct = [animal_ID];
     clusters_struct.(animal_ID_in_struct) = clusters;
 
 end
@@ -115,7 +115,7 @@ function clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstru
     % analysisstruct.frames_with_good_tracking is at least diff 50 frames
     frames = analysisstruct.frames_with_good_tracking{1,1}(specific_cond_inds);
     outcomes = analysisstruct.annot_reordered_matched{1, 1}(specific_cond_inds); % sampled every 50
-    
+    % analysisstruct.frames_tracking_appendages(specific_cond_inds) % 
     % get total number of frames: for this we need to search for the prediction.mat file in the animal folder
     % load the prediction file
     % load(fullfile("D:\test_CAPTURE",animal_ID, 'predictions.mat' ), "predictions");
@@ -134,6 +134,7 @@ function clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstru
     % com_filename = fullfile(server_folder, 'com3d_used.mat');
     % COM = load(com_filename, "com");
     n_frames_total = 30*60*100; % TODO, fix later
+    % n_frames_total = length(frames);
 
 
     % Initialize the clusters array
@@ -168,7 +169,8 @@ function clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstru
             gap = ceil((frames(i) - frames(i-1)));
             if gap > ceil(analysisstruct.tsnegranularity) 
                 % keyboard % TODO
-                clusters(current_index:current_index+gap-1) = 0; % fill gaps with zeros
+                % clusters(current_index:current_index+gap-1) = 0; % fill gaps with zeros
+                clusters(current_index:current_index+gap-1) = NaN; % Fill the gaps with NaN. TODO: I still don't know why we have these gaps (check script 1) 
                 current_index = current_index + gap;
             else
                 clusters(current_index:current_index+gap-1) = outcomes(i);
