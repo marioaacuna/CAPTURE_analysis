@@ -12,6 +12,10 @@ rootpath = GC.preprocessing_rootpath;
 clusters_struct_file = fullfile(rootpath, 'clusters_struct.mat');
 
 load(fullfile(rootpath, 'cluster_analysis_results.mat'), 'results');
+
+% Load analysis structure
+load(GC.filename_analysis, 'analysisstruct');
+
 %% choose animal  
 animal_ID = 'AK_553_F';
 
@@ -26,7 +30,7 @@ T =  readtable(labels_file);
 pain_frames = find(T.pain == 1);
 
 % clusters of interest
-coi = clusters_struct.JH_AK_553_F;
+coi = clusters_struct.(animal_ID);
 coi_pain = coi(pain_frames);
 
 pain_idx = ismember(coi_pain, results.predominantF);
