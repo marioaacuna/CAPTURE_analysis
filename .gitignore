@@ -204,6 +204,8 @@ ENV*/
 # mypy
 .mypy_cache/
 
+# Aider
+.aider*
 
 # https://github.com/github/gitignore/blob/master/Global/macOS.gitignore -----------------------------------------------
 
