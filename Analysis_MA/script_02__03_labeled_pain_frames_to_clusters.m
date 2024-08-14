@@ -8,7 +8,7 @@
 clear; close all; clc;
 global GC
 % load cluster results
-fps = 100;
+fps = GC.frame_rate;
 rootpath = GC.preprocessing_rootpath;
 clusters_struct_file = fullfile(rootpath, 'clusters_struct.mat');
 
