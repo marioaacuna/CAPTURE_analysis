@@ -34,7 +34,7 @@ clusters_pain_no_pain = cell(length(animal_ids), 2); % 2 columns for pain and no
 for iid = 1: length(animal_ids)
     % animal_ID = animal_ids{iid}; ...
 
-    animal_ID = 'AK_553_F'; % example
+    animal_ID = animal_ids{iid}; % use the animal ID from the list
 
     % calibrate condition
     if ~endsWith(animal_ID, 'F')
