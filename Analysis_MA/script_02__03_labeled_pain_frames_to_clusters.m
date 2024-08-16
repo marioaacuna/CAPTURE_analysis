@@ -155,7 +155,7 @@ figure('Position', [100, 100, 800, 600]);
     'ErrMinMode', 'None');
 
 title('Overlap of Manual and Automatic Pain Clusters', 'FontSize', 16);
-legend({'Automatic Pain Clusters', 'Manual Pain Clusters'});
+legend({'CAPTURE Pain Clusters', 'Grimace Pain Clusters'});
 
 %%
 % cluster_presence = zeros(length(animal_ids), max(predominantF));
@@ -217,21 +217,21 @@ figure('Color', 'w');
 % Frequency plot
 subplot(3,1,1);
 bar(frequency_pain_clusters);
-title('Frequency of Pain Clusters per Animal');
+title('Frequency of CAPTURE Pain Clusters per Animal');
 xlabel('Animal Index');
 ylabel('Frequency');
 box off
 % Mean Duration plot
 subplot(3,1,2);
 bar(mean_duration_pain_clusters);
-title('Mean Duration of Pain Clusters per Animal');
+title('Mean Duration of CAPTURE Pain Clusters per Animal');
 xlabel('Animal Index');
 ylabel('Mean Duration (s)');
 box off
 % Total Duration plot
 subplot(3,1,3);
 bar(total_duration_pain_clusters);
-title('Total Duration of Pain Clusters per Animal');
+title('Total Duration of CAPTURE Pain Clusters per Animal');
 xlabel('Animal Index');
 ylabel('Total Duration (s)');
 box off
