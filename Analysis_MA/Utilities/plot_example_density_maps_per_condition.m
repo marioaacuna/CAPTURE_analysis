@@ -10,6 +10,8 @@ load(GC.filename_ratception, 'ratception_struct');
 
 %%
 % change to animal_condition_identifier
+long_animal_frames_identifier = repelem(animal_condition_identifier, GC.repfactor);
+
 animal_list_used_after_analysis =  long_animal_frames_identifier(analysisstruct.frames_with_good_tracking{1});
 
 % animal_list_used_after_analysis = animal_condition_identifier;
