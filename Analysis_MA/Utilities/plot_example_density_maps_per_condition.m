@@ -1,5 +1,9 @@
 % Figure for plotting density maps per condition
 %% Load data
+clear
+close all
+global GC
+
 load(GC.filename_analysis, 'analysisstruct');
 
 % Load predictions

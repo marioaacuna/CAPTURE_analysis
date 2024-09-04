@@ -115,7 +115,7 @@ plot_predominant_clusters(analysisstruct, predominant_F, 'Predominant Formalin C
 %% Helper function
 function plot_predominant_clusters(analysisstruct, predominant_clusters, title_text)
     global GC
-    fig = figure('Position', [10, 10, 2056, 1350], 'Color', 'w', 'Name', title_text);
+    fig = figure('Position', [10, 10, 750, 900], 'Color', 'w', 'Name', title_text);
     n_rows = ceil(sqrt(numel(predominant_clusters)));
     n_cols = ceil(sqrt(numel(predominant_clusters)));
 
