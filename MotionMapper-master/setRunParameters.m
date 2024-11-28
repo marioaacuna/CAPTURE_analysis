@@ -72,7 +72,7 @@ function parameters = setRunParameters(parameters)
     rangeExtension = 20;
     
     %path to basis image
-    basisImagePath = 'segmentation_alignment/basisImage.tiff';
+    basisImagePath = 'MotionMapper-master/segmentation_alignment/basisImage.tiff';
     
     
     

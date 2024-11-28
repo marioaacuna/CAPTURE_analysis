@@ -14,37 +14,34 @@ clear
 GC = general_configs();
 
 %% INIT
-overwrite_pred_concat = 0; % in case you want to add more animals, set this to 1
-overwrite_ratception = 0; % will do or not mocap
-overwrite_MLmatobjfile = 0; % Overwrite extarcted features
-overwrite_coefficient = 0; % Overwrite dim red coeffs 
-overwrite_zvals = 0; % Overwrite tsne zvals
-do_extra_features = 0;
-plot_poses = 1;
+% Get prediction concatenation settings
+settings = get_prediction_concat_settings();
+
+% Unpack settings into variables
+overwrite_pred_concat = settings.overwrite_pred_concat;
+overwrite_ratception = settings.overwrite_ratception;
+overwrite_MLmatobjfile = settings.overwrite_MLmatobjfile;
+overwrite_coefficient = settings.overwrite_coefficient;
+overwrite_zvals = settings.overwrite_zvals;
+do_extra_features = settings.do_extra_features;
+plot_poses = settings.plot_poses;
 
 init_frame_rate = GC.frame_rate; % effective frame rate of videos
-
 rootpath = GC.preprocessing_rootpath;
+if ~exist(rootpath, 'dir'), mkdir(rootpath); end
 
-if ~exist("rootpath", 'dir'), mkdir(rootpath); end
- 
-% animal_list = {'326', '327', '328', '330', '332_training', '332', '334', '335', '336'};
-% conditions = {'F', 'F', 'S', 'S', 'N', 'S', 'F', 'F', 'F'};
+% Read metadata from YAML
+metadata = readExperimentMetadata();
 
-% Define the animals and conditions
-animals = {'AK_552', 'AK_553', 'AK_665', 'AK_667'}; % animal ids
-conditions = {'0', '1'}; % 0 for condition 'S', and 1 for condition 'F'
-dannce_path = 'D:\DANNCE';
 % Initialize structures
 agg_predictions = struct();
 animal_condition_identifier = {};
-
 
 analysis_filename = GC.filename_analysis;
 filename_predictions = GC.filename_predictions;
 
 if ~any(exist(filename_predictions, 'file'))
-    run_pred_concat = 1 ;
+    run_pred_concat = 1;
 else
     run_pred_concat = 0;
 end
@@ -58,39 +55,69 @@ if run_pred_concat || overwrite_pred_concat
     % Current offset for tracking frames
     offset = 0;
 
+    % Get all conditions from metadata
+    conditions = fieldnames(metadata.conditions);
+    
+    % Loop through each condition
+    for condition_idx = 1:length(conditions)
+        condition_name = conditions{condition_idx};
+        condition_data = metadata.conditions.(condition_name);
+                
+        % Loop through animals in this condition
+        for animal_idx = 1:length(condition_data.animals)
+            animal = condition_data.animals(animal_idx);
+            animal_id = animal.id;
+            
+            % Check if animal has 6cam recording
+            if ~animal.has_6cam
+                warning('No 6cam recording found for animal %s in condition %s', animal_id, condition_name);
+                continue;
+            end
+            
+            % First construct path to animal folder
+            animal_path = fullfile(metadata.data_root_dir, ...
+                condition_data.data_path, ...
+                '6cam_data', ...
+                animal.path);
 
-    % Loop through each animal
-    for i = 1:length(animals)
-        animal_id = animals{i};
+            % Get the date folder (assuming it's the only folder in there that's a date)
+            date_folders = dir(animal_path);
+            date_folders = date_folders([date_folders.isdir]); % Only get directories
+            date_folders = date_folders(~ismember({date_folders.name}, {'.', '..'})); % Remove . and ..
 
-        % Loop through each condition for the current animal
-        for j = 1:length(conditions)
-            condition = conditions{j};
+            if isempty(date_folders)
+                warning('No date folder found for animal %s in condition %s', animal_id, condition_name);
+                continue;
+            end
+    
+            date_folder = date_folders(1).name;
+            % Construct full path to predictions
+            load_path = fullfile(animal_path, ...
+                date_folder, ...
+                'DANNCE', 'predict_results', ...
+                'predictions.mat');
 
-            % Construct the path to the predictions file
-            load_path = fullfile(dannce_path, animal_id, condition,'DANNCE\predict_results', 'predictions.mat');
-
-            % Check if the file exists
+            % Check if file exists
             if ~exist(load_path, 'file')
                 warning('File not found: %s', load_path);
                 continue;
             end
 
             % Load predictions for the current animal and condition
-            load(load_path); % Assuming the loaded structure is called 'predictions'
-
-            body_parts = fieldnames(predictions); % Get the list of body parts
-
+            load(load_path); % loads 'predictions' structure
+            
+            body_parts = fieldnames(predictions);
+            
             % Process each body part
             for k = 1:length(body_parts)
                 part_name = body_parts{k};
 
                 if isfield(agg_predictions, part_name)
                     if ~strcmp(part_name, 'sampleID')
-                        % Concatenate if the field already exists in agg_predictions
+                        % Concatenate if field exists
                         agg_predictions.(part_name) = cat(1, agg_predictions.(part_name), predictions.(part_name));
                     else
-                        % For sampleID, adjust the values before concatenating
+                        % For sampleID, adjust values before concatenating
                         last_sample_id = 0;
                         if ~isempty(agg_predictions.(part_name))
                             last_sample_id = agg_predictions.(part_name)(end);
@@ -98,29 +125,36 @@ if run_pred_concat || overwrite_pred_concat
                         agg_predictions.(part_name) = cat(2, agg_predictions.(part_name), predictions.(part_name) + last_sample_id);
                     end
                 else
-                    % Otherwise, initialize the field in agg_predictions
+                    % Initialize field in agg_predictions
                     agg_predictions.(part_name) = predictions.(part_name);
                 end
             end
-
-            % Update the animal_condition_identifier
+                        
+            % Update the animal_condition_identifier with repetition for each frame
             num_frames_for_current_combo = size(predictions.(body_parts{1}), 1);
-            condition_letter = condition_to_letter(condition);
-            animal_condition_identifier = [animal_condition_identifier; repmat({sprintf('%s_%s', animal_id, condition_letter)}, num_frames_for_current_combo, 1)];
+            condition_letter = condition_to_letter(condition_name);
+            new_identifiers = repmat({sprintf('%s_%s', animal_id, condition_letter)}, num_frames_for_current_combo, 1);
+
+            % If animal_condition_identifier is empty, initialize it
+            if isempty(animal_condition_identifier)
+                animal_condition_identifier = new_identifiers;
+            else
+                % Concatenate with existing identifiers
+                animal_condition_identifier = vertcat(animal_condition_identifier, new_identifiers);
+            end
         end
     end
-    % At this point, agg_predictions contains concatenated body part data for all animals
-    % and animal_frames_identifier indicates the animal for each frame.
     
-    % save the data
- 
-    predictions = agg_predictions;
-    % predictions.predictions = agg_predictions;
-    save(filename_predictions, 'predictions', 'animal_condition_identifier')
+    % Save concatenated predictions
+    predictions = agg_predictions; % rename it to match further code
+
+    save(filename_predictions, 'predictions', 'animal_condition_identifier', '-v7.3');
+    disp('Saved concatenated predictions');
 else
     disp('predictions previously concatenated, now loading them')
     load(filename_predictions)
 end
+
 
 %%
 long_animal_frames_identifier = repelem(animal_condition_identifier,3);
@@ -357,12 +391,20 @@ save(analysis_filename, 'analysisstruct' , '-v7.3')
 
 
 %% Functions
-function letter = condition_to_letter(condition)
-    if strcmp(condition, '0')
-        letter = 'S';
-    elseif strcmp(condition, '1')
-        letter = 'F';
-    else
-        error('Unknown condition: %s', condition);
+% First, let's create the condition_to_letter function to handle all conditions
+function letter = condition_to_letter(condition_name)
+    switch lower(condition_name)
+        case 'saline'
+            letter = 'S';
+        case 'formalin'
+            letter = 'F';
+        case 'baseline'
+            letter = 'B';
+        case 'sham'
+            letter = 'H';  % H for sHam to avoid confusion with S for Saline
+        case 'sni'
+            letter = 'N';  % N for sNi
+        otherwise
+            error('Unknown condition: %s', condition_name);
     end
 end
