@@ -1,0 +1,6 @@
+%% script_10_Analysis_miniscope_clusters
+% Preamble
+% This script will analyse the calcium acitvity of neuronal recordings and
+% categorize them into the different clusters, based on clusters ids ,
+% This script will read the ROI fluorescence and the cluster vector as inputs.
+
