@@ -90,7 +90,7 @@ for animal_idx = 1:length(animal_list)
     animal_ID = animal_list{animal_idx};
     clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstruct, upsamplig_factor, conditions);
     % store the clusters in a sturcture
-    animal_ID_in_struct = [animal_ID];
+    animal_ID_in_struct = ['ID_',animal_ID];
     clusters_struct.(animal_ID_in_struct) = clusters;
 
 end
@@ -120,13 +120,13 @@ function clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstru
     % load the prediction file
     % load(fullfile("D:\test_CAPTURE",animal_ID, 'predictions.mat' ), "predictions");
     this_exp_cond = conditions{animal_idx};
-    if strcmp(this_exp_cond, 'F')
-        folder_exp_cond = 'PFA';
-    elseif strcmp(this_exp_cond, 'S')
-        folder_exp_cond = 'saline';
-    end
+    % if strcmp(this_exp_cond, 'F')
+    %     folder_exp_cond = 'PFA';
+    % elseif strcmp(this_exp_cond, 'S')
+    %     folder_exp_cond = 'saline';
+    % end
 
-    disp(['Running Animal ', animal_ID, ' - condition ', folder_exp_cond])
+    disp(['Running Animal ', animal_ID, ' - condition ', this_exp_cond])
     % server_folder = fullfile("H:\DANNCE\6cam_behavior",folder_exp_cond, animal_ID,"DANNCE_ready\DANNCE\predict_results_net_8" );
     % use com to read the number of frames
     % TODO: check if this is correct, becuase for some reasong for an example animal com has 216001 frames,
