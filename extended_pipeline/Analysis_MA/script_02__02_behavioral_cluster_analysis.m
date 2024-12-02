@@ -69,135 +69,110 @@ conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_clusters = unique(cluster_ids);
 num_clusters = length(unique_clusters);
 num_animals = length(animal_ids);
+unique_conditions = unique(conditions);
+num_conditions = length(unique_conditions);
 
-% Initialize matrices to store cluster proportions
-cluster_proportions_S = zeros(num_animals, num_clusters);
-cluster_proportions_F = zeros(num_animals, num_clusters);
+% Initialize cell array to store cluster proportions for each condition
+cluster_proportions = cell(num_conditions, 1);
+for i = 1:num_conditions
+    cluster_proportions{i} = nan(num_animals, num_clusters);
+end
 
 % Calculate cluster proportions for each animal and condition
 for i = 1:num_animals
-    animal_frames_S = animal_indices == i & strcmp(conditions, 'S');
-    animal_frames_F = animal_indices == i & strcmp(conditions, 'F');
-    
-    total_frames_S = sum(animal_frames_S);
-    total_frames_F = sum(animal_frames_F);
-    
-    for j = 1:num_clusters
-        cluster_frames_S = cluster_ids(animal_frames_S) == unique_clusters(j);
-        cluster_frames_F = cluster_ids(animal_frames_F) == unique_clusters(j);
+    for c = 1:num_conditions
+        animal_frames = animal_indices == i & strcmp(conditions, unique_conditions{c});
+        total_frames = sum(animal_frames);
         
-        cluster_proportions_S(i, j) = sum(cluster_frames_S) / total_frames_S;
-        cluster_proportions_F(i, j) = sum(cluster_frames_F) / total_frames_F;
+        if total_frames > 0  % Only calculate if there are frames for this condition
+            for j = 1:num_clusters
+                cluster_frames = cluster_ids(animal_frames) == unique_clusters(j);
+                cluster_proportions{c}(i, j) = sum(cluster_frames) / total_frames;
+            end
+        end
     end
 end
-
 
 %% Perform Statistical Analysis
 p_values_all = zeros(1, num_clusters);
-mean_diff = zeros(1, num_clusters);
+f_stats = zeros(1, num_clusters);
+condition_effects = cell(1, num_clusters);
+
+% Define colors for each condition
+colors = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], [0.9290 0.6940 0.1250], ...
+          [0.4940 0.1840 0.5560], [0.4660 0.6740 0.1880]};
 
 for j = 1:num_clusters
-    [h, p_values_all(j), ci, stats] = ttest(cluster_proportions_S(:, j), cluster_proportions_F(:, j));
-    mean_diff(j) = mean(cluster_proportions_F(:, j) - cluster_proportions_S(:, j));
+    % Prepare data for ANOVA
+    cluster_data = [];
+    group_labels = [];
+    for c = 1:num_conditions
+        valid_data = cluster_proportions{c}(:, j);
+        valid_data = valid_data(~isnan(valid_data));
+        cluster_data = [cluster_data; valid_data];
+        group_labels = [group_labels; repmat(unique_conditions(c), length(valid_data), 1)];
+    end
+    
+    % Perform one-way ANOVA
+    [p_values_all(j), tbl] = anova1(cluster_data, group_labels, 'off');
+    f_stats(j) = tbl{2,5};
+    
+    % Perform post-hoc multiple comparisons
+    [~, ~, stats] = anova1(cluster_data, group_labels, 'off');
+    condition_effects{j} = multcompare(stats, 'Display', 'off');
 end
 
 % Correct for multiple comparisons
-% [h_corrected, crit_p, adj_ci_cvrg, adj_p] = fdr_bh(p_values);
-
-%% Visualize Results
-f1 = figure;
-bar(mean_diff);
-hold on;
-% errorbar(1:num_clusters, mean_diff, adj_p, 'k', 'LineStyle', 'none');
-xlabel('Cluster ID');
-ylabel('Mean Difference (F - S)');
-title('Difference in Cluster Proportions (F - S)');
-sig_clusters = find(p_values_all < 0.05);
-plot(sig_clusters, mean_diff(sig_clusters), 'r*');
-hold off;
-
+[~, ~, ~, adj_p] = fdr_bh(p_values_all);
 
 %% Visualize Proportions Results
-%%
-fig_prop = figure('color', 'w', 'Position', [100 100 1500 700]); % Create a rectangular figure
+fig_prop = figure('color', 'w', 'Position', [100 100 1500 700]);
 
-% Define some constants for plotting aesthetics
-barWidth = 0.75; % Width of the bars
-gapWidth = 1; % Gap between each cluster
-currentX = 1; % Starting x position for the first bar
-
-p_values = struct();
-t_statistics = struct();
+barWidth = 0.15; % Adjusted for multiple conditions
+gapWidth = 1;
+currentX = 1;
 
 for i = 1:length(unique_clusters)
-    cluster_name = ['id_',num2str(unique_clusters(i))];
-    data_S = cluster_proportions_S(:, i);
-    data_F = cluster_proportions_F(:, i);
-
-    % Perform paired t-test (since we have before-after data for each animal)
-    [h, p, ci, stats] = ttest(data_S, data_F);
-
-    % Store p-value and t-statistic
-    p_values.(cluster_name) = p;
-    t_statistics.(cluster_name) = stats.tstat;
-
-    % Calculate mean and SEM for S
-    mean_S = mean(data_S);
-    SEM_S = std(data_S) / sqrt(length(data_S));
-
-    % Calculate mean and SEM for F
-    mean_F = mean(data_F);
-    SEM_F = std(data_F) / sqrt(length(data_F));
-
-    % Plot bar for S
-    bar(currentX, mean_S, barWidth, 'b');
-    hold on;
-
-    % Plot error bar for S
-    errorbar(currentX, mean_S, SEM_S, 'k', 'LineStyle', 'none');
-
-    % Plot bar for F right next to S
-    bar(currentX + barWidth, mean_F, barWidth, 'r');
-
-    % Plot error bar for F
-    errorbar(currentX + barWidth, mean_F, SEM_F, 'k', 'LineStyle', 'none');
-
-    % Add significance stars
-    if p < 0.05 && p >= 0.01
-        text(currentX + barWidth/2, max(mean_F, mean_S) + max(mean_F, mean_S) * 0.20, '*', 'HorizontalAlignment', 'center', 'FontSize',22)
-    elseif p < 0.01 && p >= 0.001
-        text(currentX + barWidth/2, max(mean_F, mean_S) + max(mean_F, mean_S) * 0.20, '**', 'HorizontalAlignment', 'center','FontSize',22)
-    elseif p < 0.001
-        text(currentX + barWidth/2, max(mean_F, mean_S) + max(mean_F, mean_S) * 0.20, '***', 'HorizontalAlignment', 'center','FontSize',22)
+    % Plot bars for each condition
+    means = zeros(1, num_conditions);
+    sems = zeros(1, num_conditions);
+    
+    for c = 1:num_conditions
+        data = cluster_proportions{c}(:, i);
+        means(c) = mean(data, 'omitnan');
+        sems(c) = std(data, 'omitnan') / sqrt(sum(~isnan(data)));
+        
+        x_pos = currentX + (c-1)*barWidth;
+        bar(x_pos, means(c), barWidth, 'FaceColor', colors{c});
+        hold on;
+        errorbar(x_pos, means(c), sems(c), 'k', 'LineStyle', 'none');
     end
-
-    % Update x position for the next cluster
-    currentX = currentX + barWidth * 2 + gapWidth;
+    
+    % Add significance markers if ANOVA shows significance
+    if p_values_all(i) < 0.05
+        y_max = max(means + sems) * 1.1;
+        text(currentX + (num_conditions*barWidth)/2, y_max, '*', ...
+             'HorizontalAlignment', 'center', 'FontSize', 22);
+    end
+    
+    currentX = currentX + num_conditions*barWidth + gapWidth;
 end
 
 % Customize the plot
 xlabel('Cluster ID', 'FontSize', 14);
 ylabel('Mean Proportion', 'FontSize', 14);
-title('Cluster Proportions in Control (S) and Pain (F) Conditions', 'FontSize', 16);
-% legend({'Control (S)', 'Pain (F)'}, 'Location', 'Best', 'FontSize', 12);
-set(gca, 'XTick', 1:barWidth*2+gapWidth:currentX-gapWidth, 'XTickLabel', unique_clusters, 'FontSize', 12);
+title('Cluster Proportions Across Conditions', 'FontSize', 16);
+legend(unique_conditions, 'Location', 'northeast', 'FontSize', 12);
+set(gca, 'XTick', 1:barWidth*num_conditions+gapWidth:currentX-gapWidth, ...
+    'XTickLabel', unique_clusters, 'FontSize', 12);
 xlim([0, currentX-gapWidth]);
-ylim([0, max(max(mean(cluster_proportions_S)), max(mean(cluster_proportions_F))) * 1.3]);  % Adjust y-axis to accommodate stars
+ylim([0, max(cell2mat(cellfun(@(x) max(max(x)), cluster_proportions, 'UniformOutput', false))) * 1.3]);
 set(gca, 'TickDir', 'out');
 grid off;
 box off;
 
-
-% Adjust figure properties for better visibility
-set(gcf, 'Color', 'w');  % Set figure background to white
-
-hold off;
-
 % Save the figure
-% export_fig(fullfile(rootpath,'figures', 'cluster_proportions_comparison.pdf'), '-pdf', fig_prop)
-saveas(fig_prop, fullfile(GC.figure_folder, 'cluster_proportions_comparison.fig'));
-
-
+saveas(fig_prop, fullfile(GC.figure_folder, 'cluster_proportions_comparison_all_conditions.fig'));
 
 %% 2. Visualization of significant clusters
 to_take = clusters(p_values_all < 0.05 & mean_diff > 0);
@@ -214,17 +189,13 @@ for ic = 1:numel(to_take)
     title(this_cls)
 end
 
-%% CAlculate predominant frames
+%% Calculate predominant frames
+% Initialize storage for cluster density per condition
+cluster_density = zeros(length(unique_clusters), num_conditions);
 
-% Initialize storage for the density of each cluster per condition
-cluster_density_condition_1 = zeros(size(unique_clusters));
-cluster_density_condition_0 = zeros(size(unique_clusters));
+% Initialize matrix to store results
+clusterComposition = zeros(num_clusters, num_conditions);
 
-% Initialize matrices to store results
-clusterComposition = zeros(num_clusters, 2);  % [S_count, F_count]
-
-% animal_frames_ids = frame_identifiers(good_frames);
-    
 for c = 1:length(unique_clusters)
     cluster_index = unique_clusters(c);
     
@@ -235,64 +206,158 @@ for c = 1:length(unique_clusters)
     animal_conditions_in_cluster = frame_identifiers(frames_in_cluster);
     
     % Count frames for each condition
-    cluster_density_condition_1(c) = sum(cellfun(@(x) endsWith(x, '_F'), animal_conditions_in_cluster));
-    cluster_density_condition_0(c) = sum(cellfun(@(x) endsWith(x, '_S'), animal_conditions_in_cluster));
-    
-    
-    clusterComposition(c, 1) =  sum(cellfun(@(x) endsWith(x, '_F'), animal_conditions_in_cluster));
-    clusterComposition(c, 2) =  sum(cellfun(@(x) endsWith(x, '_S'), animal_conditions_in_cluster));
+    for cond = 1:num_conditions
+        condition = unique_conditions{cond};
+        cluster_density(c, cond) = sum(cellfun(@(x) endsWith(x, ['_' condition]), animal_conditions_in_cluster));
+        clusterComposition(c, cond) = sum(cellfun(@(x) endsWith(x, ['_' condition]), animal_conditions_in_cluster));
+    end
 end
 
-% Calculate the difference in number of frames between condition 1 and 0 for each cluster
-difference_frames = cluster_density_condition_1 - cluster_density_condition_0;
-
-% Create a bar graph
-figure;
-bar(difference_frames);
-title('Difference in Frame Counts: Condition 1 vs. Condition 0');
+% Create a bar graph showing relative differences
+figure('Position', [100 100 1200 600], 'Color', 'w');
+b = bar(cluster_density, 'stacked');
+for i = 1:num_conditions
+    b(i).FaceColor = colors{i};
+end
+title('Cluster Frame Distribution Across Conditions');
 xlabel('Cluster');
-ylabel('Difference in Frame Counts');
-set(gca, 'XTick', 0:10:length(unique_clusters), 'XTickLabel', arrayfun(@num2str, 0:10:length(unique_clusters), 'UniformOutput', false));
+ylabel('Number of Frames');
+legend(unique_conditions, 'Location', 'northeastoutside');
+set(gca, 'XTick', 1:length(unique_clusters));
 box off
 
+% Calculate proportions
 totalFrames = sum(clusterComposition, 2);
 clusterProportions = clusterComposition ./ totalFrames;
 
-% Identify predominantly associated clusters
-threshold = 0.99;  % Define threshold for "predominant" association
-predominantF = find(clusterProportions(:, 1) >= threshold);
-predominantS = find(clusterProportions(:, 2) >= threshold);
+% Identify predominantly associated clusters for each condition
+threshold = 0.75;  % Adjusted threshold for multiple conditions
+predominant_clusters = cell(num_conditions, 1);
 
-to_take = predominantF;
-fig_predominant = figure('pos', [10,10,2056,1350], 'color','w');
-n_rows = ceil(sqrt(numel(to_take)));
-n_cols = ceil(sqrt(numel(to_take)));
-
-for ic = 1:numel(to_take)
-    subplot(n_rows, n_cols, ic)
-    this_cls = to_take(ic);
-    fprintf('ic = %i - \n', this_cls)
-    plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
-        find(analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
-    title(this_cls)
+for cond = 1:num_conditions
+    predominant_clusters{cond} = find(clusterProportions(:, cond) >= threshold);
+    
+    % Create figure for predominant clusters of each condition
+    if ~isempty(predominant_clusters{cond})
+        fig_predominant = figure('pos', [10,10,2056,1350], 'color','w');
+        to_take = predominant_clusters{cond};
+        n_rows = ceil(sqrt(numel(to_take)));
+        n_cols = ceil(sqrt(numel(to_take)));
+        
+        for ic = 1:numel(to_take)
+            subplot(n_rows, n_cols, ic)
+            this_cls = to_take(ic);
+            fprintf('Condition %s - Cluster %i\n', unique_conditions{cond}, this_cls)
+            try
+                plot_mean_cluster_aligned(analysisstruct.mocapstruct_reduced_agg{1},...
+                    find(analysisstruct.annot_reordered{end}==this_cls),...
+                    sprintf('Cluster %d (%s)', this_cls, unique_conditions{cond}));
+                title(sprintf('Cluster %d\nProportion: %.2f', this_cls, clusterProportions(this_cls, cond)))
+            catch
+                continue
+            end
+        end
+        
+        sgtitle(sprintf('Predominant Clusters for Condition %s', unique_conditions{cond}))
+        predominant_figure_name = fullfile(GC.figure_folder, sprintf('predominant_%s.pdf', unique_conditions{cond}));
+        % export_fig(predominant_figure_name, '-pdf', fig_predominant)
+    end
 end
-predominat_figure_name = fullfile(GC.figure_folder, 'predominant_F.pdf');
-export_fig(predominat_figure_name, '-pdf', fig_predominant)
 
+% Update results structure
+results.cluster_density = cluster_density;
+results.clusterProportions = clusterProportions;
+results.predominant_clusters = predominant_clusters;
 
-%% Save Results
-results = struct();
-results.cluster_proportions_S = cluster_proportions_S;
-results.cluster_proportions_F = cluster_proportions_F;
-results.p_values = p_values;
-results.mean_differences = mean_diff;
-results.predominantF = predominantF;
-results.predominantS = predominantS;
-
-
+% Save updated results
 save(fullfile(rootpath, 'cluster_analysis_results.mat'), 'results');
 
 
+%% 2.1 feature analyses
+%% Cluster Distribution Analysis Across Conditions
+disp('Analyzing cluster distributions across conditions...');
+
+% Get unique identifiers
+% unique_clusters = unique(cluster_ids);
+% num_clusters = length(unique_clusters);
+% conditions = animal_condition_identifier;
+% unique_conditions = unique(conditions);
+% num_conditions = length(unique_conditions);
+
+% Select specific feature set (using appendage_pca_score indices)
+feat_idx = 51:60; % Indices for appendage_pca_score (10 dimensions)
+features = analysisstruct.jt_features(:,feat_idx);
+clusters = cluster_ids(:);
+% conditions = upsampled_identifiers(good_frames);
+
+% Perform PCA on selected features
+[coeff, score, latent] = pca(features, 'NumComponents',2);
+explained = cumsum(latent)./sum(latent) * 100;
+n_components = find(explained >= 80, 1);
+features_reduced = score(:, 1:2);
+
+% Initialize structure for condition-specific data
+condition_data = struct();
+
+for c = 1:num_conditions
+    cond_mask = strcmp(conditions, unique_conditions{c});
+    
+    condition_data(c).label = unique_conditions{c};
+    condition_data(c).features = features_reduced(cond_mask, :);
+    condition_data(c).clusters = clusters(cond_mask);
+end
+
+% Visualization
+figure('Position', [100 100 1200 800]);
+
+% 1. PCA space distribution
+subplot(2,2,1)
+hold on;
+colors = lines(num_conditions);
+for c = 1:num_conditions
+    scatter(condition_data(c).features(:,1), condition_data(c).features(:,2), ...
+        20, colors(c,:), 'filled', 'AlphaData', 0.3);
+end
+xlabel('PC1'); ylabel('PC2');
+title('Distribution in PCA Space');
+legend(unique_conditions, 'Location', 'best');
+
+% 2. Cluster frequency by condition
+subplot(2,2,2)
+cluster_freq = zeros(num_conditions, num_clusters);
+for c = 1:num_conditions
+    temp = histcounts(condition_data(c).clusters, 1:num_clusters+1);
+    cluster_freq(c,:) = temp / sum(temp);
+end
+bar(cluster_freq', 'stacked');
+xlabel('Cluster ID');
+ylabel('Normalized Frequency');
+title('Cluster Distribution by Condition');
+legend(unique_conditions, 'Location', 'best');
+
+% 3. Cluster similarity matrix
+subplot(2,2,[3,4])
+similarity_matrix = zeros(num_conditions);
+for i = 1:num_conditions
+    for j = 1:num_conditions
+        p = cluster_freq(i,:);
+        q = cluster_freq(j,:);
+        similarity_matrix(i,j) = 1 - sqrt(0.5 * ...
+            (kldiv(p + eps, q + eps) + kldiv(q + eps, p + eps)));
+    end
+end
+imagesc(similarity_matrix);
+colorbar;
+xticks(1:num_conditions);
+yticks(1:num_conditions);
+xticklabels(unique_conditions);
+yticklabels(unique_conditions);
+title('Condition Similarity Matrix');
+
+% Helper function for KL divergence
+function d = kldiv(p, q)
+    d = sum(p .* log2(p./q));
+end
 %% 2. Temporal Analysis
 disp('Performing Temporal Analysis...');
 % TODO: Implement temporal analysis
