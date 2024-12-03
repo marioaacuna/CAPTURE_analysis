@@ -123,7 +123,7 @@ for j = 1:num_clusters
 end
 
 % Correct for multiple comparisons
-[~, ~, ~, adj_p] = fdr_bh(p_values_all);
+% [~, ~, ~, adj_p] = fdr_bh(p_values_all);
 
 %% Visualize Proportions Results
 fig_prop = figure('color', 'w', 'Position', [100 100 1500 700]);
@@ -175,7 +175,7 @@ box off;
 saveas(fig_prop, fullfile(GC.figure_folder, 'cluster_proportions_comparison_all_conditions.fig'));
 
 %% 2. Visualization of significant clusters
-to_take = clusters(p_values_all < 0.05 & mean_diff > 0);
+to_take = cluster_ids(p_values_all < 0.05);%) & mean_diff > 0); % TODO: fix: mean_diff does not exist
 fig_predominant = figure('pos', [10,300,1500,1900]);
 n_rows = ceil(sqrt(numel(to_take)));
 n_cols = ceil(sqrt(numel(to_take)));
