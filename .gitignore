@@ -47,8 +47,8 @@ $RECYCLE.BIN/
 *.asv
 !setup.cfg
 !cfg/yolov3*.cfg
-**/gs_font_path.txt
 **/export_fig/.ignore/
+**/.ignore
 
 
 storage.googleapis.com
@@ -80,6 +80,10 @@ val2017.zip
 #*.mat
 !targets*.mat
 *.asv
+
+# Ghostscript GitIgnore -------------------------------------------------------------------------------------------------
+**/ghostscript.txt
+**/gs_font_path.txt
 
 # Neural Network weights -----------------------------------------------------------------------------------------------
 *.weights
