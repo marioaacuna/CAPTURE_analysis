@@ -277,24 +277,14 @@ save(fullfile(rootpath, 'cluster_analysis_results.mat'), 'results');
 %% Cluster Distribution Analysis Across Conditions
 disp('Analyzing cluster distributions across conditions...');
 
-% Get unique identifiers
-% unique_clusters = unique(cluster_ids);
-% num_clusters = length(unique_clusters);
-% conditions = animal_condition_identifier;
-% unique_conditions = unique(conditions);
-% num_conditions = length(unique_conditions);
+% Load zvals
+roothpath_CAPTURE = fullfile(rootpath, 'kinematics');
+zvals_filename = fullfile(roothpath_CAPTURE, 'zvals.mat');
+load(zvals_filename, 'zvals');
 
-% Select specific feature set (using appendage_pca_score indices)
-feat_idx = 51:60; % Indices for appendage_pca_score (10 dimensions)
-features = analysisstruct.jt_features(:,feat_idx);
+% Use zvals for analysis
+features_reduced = zvals;
 clusters = cluster_ids(:);
-% conditions = upsampled_identifiers(good_frames);
-
-% Perform PCA on selected features
-[coeff, score, latent] = pca(features, 'NumComponents',2);
-explained = cumsum(latent)./sum(latent) * 100;
-n_components = find(explained >= 80, 1);
-features_reduced = score(:, 1:2);
 
 % Initialize structure for condition-specific data
 condition_data = struct();
@@ -306,20 +296,19 @@ for c = 1:num_conditions
     condition_data(c).features = features_reduced(cond_mask, :);
     condition_data(c).clusters = clusters(cond_mask);
 end
-
-% Visualization
+%% Visualization
 figure('Position', [100 100 1200 800]);
 
-% 1. PCA space distribution
+% 1. t-SNE space distribution
 subplot(2,2,1)
 hold on;
 colors = lines(num_conditions);
 for c = 1:num_conditions
     scatter(condition_data(c).features(:,1), condition_data(c).features(:,2), ...
-        20, colors(c,:), 'filled', 'AlphaData', 0.3);
+        5, colors(c,:), 'filled', 'AlphaData', 0.3);
 end
-xlabel('PC1'); ylabel('PC2');
-title('Distribution in PCA Space');
+xlabel('t-SNE 1'); ylabel('t-SNE 2');
+title('Distribution in t-SNE Space');
 legend(unique_conditions, 'Location', 'best');
 
 % 2. Cluster frequency by condition
@@ -346,18 +335,153 @@ for i = 1:num_conditions
             (kldiv(p + eps, q + eps) + kldiv(q + eps, p + eps)));
     end
 end
-imagesc(similarity_matrix);
-colorbar;
-xticks(1:num_conditions);
-yticks(1:num_conditions);
-xticklabels(unique_conditions);
-yticklabels(unique_conditions);
+
+% Display heatmap with values
+heatmap_handle = heatmap(similarity_matrix, 'Colormap', jet, 'ColorbarVisible', 'on');
+heatmap_handle.XDisplayLabels = unique_conditions;
+heatmap_handle.YDisplayLabels = unique_conditions;
+heatmap_handle.CellLabelFormat = '%.2f';
 title('Condition Similarity Matrix');
 
 % Helper function for KL divergence
 function d = kldiv(p, q)
     d = sum(p .* log2(p./q));
 end
+
+%% 2.2 Transition Matrix Analysis
+disp('Performing Transition Matrix Analysis...');
+
+unique_animals = unique(animal_ids);
+
+% Initialize a cell array to store transition matrices per condition
+transition_matrices = cell(num_conditions, 1);
+avg_offdiag_probs = cell(num_conditions, 1);
+
+
+for cond_idx = 1:num_conditions
+    condition = unique_conditions{cond_idx};
+    condition_matrices = [];
+    condition_avg_probs = [];
+
+    
+    for animal_idx = 1:length(unique_animals)
+        animal = unique_animals{animal_idx};
+        
+        % Get indices for this animal and condition
+        animal_cond_mask = strcmp(conditions, condition) & strcmp(animal_ids(animal_indices), animal);
+        
+        % Get cluster sequence for this animal and condition
+        clusters_seq = cluster_ids(animal_cond_mask);
+        
+        if length(clusters_seq) > 1
+            % Compute transition matrix for this sequence
+            num_clusters = max(unique_clusters);
+            T = zeros(num_clusters, num_clusters);
+            
+            for i = 1:length(clusters_seq)-1
+                from = clusters_seq(i);
+                to = clusters_seq(i+1);
+                T(from, to) = T(from, to) + 1;
+            end
+            
+            % Normalize transition matrix
+            T = T ./ sum(T, 2);
+            T(isnan(T)) = 0;
+
+            % Extract off-diagonal elements excluding zeros
+            off_diag_indices = ~eye(num_clusters);
+            off_diag_elements = T(off_diag_indices & T > 0);
+            if ~isempty(off_diag_elements)
+                avg_prob = mean(off_diag_elements);
+                % Store average off-diagonal probability
+                condition_avg_probs = [condition_avg_probs; avg_prob];
+            end
+            
+            % Store transition matrix
+            condition_matrices = cat(3, condition_matrices, T);
+        end
+    end
+    
+    % Store all matrices for this condition
+    transition_matrices{cond_idx} = condition_matrices;
+    avg_offdiag_probs{cond_idx} = condition_avg_probs;
+
+end
+
+% Average transition matrices for each condition
+avg_transition_matrices = cell(num_conditions,1);
+for cond_idx = 1:num_conditions
+    avg_transition_matrices{cond_idx} = mean(transition_matrices{cond_idx}, 3, 'omitnan');
+end
+
+% Visualize average transition matrices for each condition
+figure('Position', [100 100 1200 600]);
+for cond_idx = 1:num_conditions
+    subplot(1, num_conditions, cond_idx);
+    imagesc(avg_transition_matrices{cond_idx});
+    colorbar;
+    title(['Avg Transition Matrix - ' unique_conditions{cond_idx}]);
+    xlabel('To Cluster');
+    ylabel('From Cluster');
+    set(gca, 'XTick', 1:num_clusters, 'YTick', 1:num_clusters);
+    axis square;
+    caxis([0 0.05])
+end
+
+
+% Perform statistical comparison across conditions
+% Combine data and group labels
+all_avg_probs = [];
+group_labels = [];
+
+for cond_idx = 1:num_conditions
+    all_avg_probs = [all_avg_probs; avg_offdiag_probs{cond_idx}];
+    group_labels = [group_labels; repmat(unique_conditions(cond_idx), length(avg_offdiag_probs{cond_idx}), 1)];
+end
+
+% Perform Kruskal-Wallis test
+[p, tbl, stats] = kruskalwallis(all_avg_probs, group_labels, 'off');
+
+
+% Display results
+fprintf('Kruskal-Wallis test p-value: %.4f\n', p);
+
+% Create figure for transition probability comparison
+figure('Position', [100 100 800 600], 'Color', 'w');
+
+% Calculate means and SEMs for each condition
+means = zeros(1, num_conditions);
+sems = zeros(1, num_conditions);
+for cond_idx = 1:num_conditions
+    means(cond_idx) = mean(avg_offdiag_probs{cond_idx});
+    sems(cond_idx) = std(avg_offdiag_probs{cond_idx}) / sqrt(length(avg_offdiag_probs{cond_idx}));
+end
+
+% Create bar plot with error bars
+b = bar(means, 'FaceColor', 'flat');
+hold on;
+errorbar(1:num_conditions, means, sems, 'k', 'LineStyle', 'none', 'CapSize', 10);
+
+% Customize plot
+for cond_idx = 1:num_conditions
+    b.CData(cond_idx,:) = colors(cond_idx,:);
+end
+
+xlabel('Condition');
+ylabel('Average Transition Probability');
+title('Mean Transition Probabilities Across Conditions');
+set(gca, 'XTick', 1:num_conditions, 'XTickLabel', unique_conditions);
+box off;
+set(gca, 'TickDir', 'out');
+
+% Add significance marker if test is significant
+if p < 0.05
+    plot(1:num_conditions, max(means + sems) * 1.1 * ones(1,num_conditions), 'k-');
+    text(mean(1:num_conditions), max(means + sems) * 1.15, sprintf('p = %.3f', p), ...
+        'HorizontalAlignment', 'center');
+end
+
+
 %% 2. Temporal Analysis
 disp('Performing Temporal Analysis...');
 % TODO: Implement temporal analysis
