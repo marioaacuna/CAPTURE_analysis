@@ -10,7 +10,7 @@ rootpath = GC.preprocessing_rootpath;
 % Load Data
 load(GC.filename_analysis, 'analysisstruct');
 
-% run main function
+% run movement pattern function
 m_f = analyze_movement_patterns(analysisstruct.mocapstruct_reduced_agg);
 
 % Extract conditions
