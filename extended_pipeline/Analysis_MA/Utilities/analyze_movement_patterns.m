@@ -6,7 +6,8 @@ function movement_features = analyze_movement_patterns(mocapstruct_reduced_agg)
     pain_related_pairs = {
         {'KneeL', 'KneeR'},...      % Direct comparison of affected vs unaffected knee
         {'AnkleL', 'AnkleR'},...    % Compensatory ankle movements
-        {'HindpawL', 'HindpawR'}    % Weight bearing differences
+        {'HindpawL', 'HindpawR'},...% Weight bearing differences
+        {'ForepawL', 'ForepawR'}    % Forepaw comparison
     };
     
     % Compensatory movement pairs
@@ -45,8 +46,9 @@ function asym_idx = compute_pain_asymmetry(affected, unaffected)
     % Positive values indicate greater affected side movement (potential guarding)
     % Negative values indicate compensation by unaffected side
     diff = affected - unaffected;
-    mean_val = (abs(affected) + abs(unaffected)) / 2;
-    asym_idx = diff ./ (mean_val + eps);
+    % mean_val = (abs(affected) + abs(unaffected)) / 2;
+    % asym_idx = diff ./ (mean_val + eps);
+    asym_idx = diff;
 end
 
 function [phase_diff, coherence] = compute_phase_relationship(signal1, signal2)
