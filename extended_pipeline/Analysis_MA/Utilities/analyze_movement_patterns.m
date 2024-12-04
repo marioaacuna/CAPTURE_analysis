@@ -1,5 +1,5 @@
-function movement_features = analyze_movement_patterns(mocapstruct_reduced_agg)
-    markers = mocapstruct_reduced_agg{1, 1}.markers_aligned_preproc;
+function movement_features = analyze_movement_patterns(data)
+    markers = data;
     movement_features = struct();
     
     % Primary analysis pairs focusing on affected limb

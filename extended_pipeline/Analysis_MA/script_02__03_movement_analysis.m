@@ -8,17 +8,25 @@ GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
 
 % Load Data
+
+% Load ratception structure
+load(GC.filename_ratception, 'ratception_struct');
+
+% Load analysis structre
 load(GC.filename_analysis, 'analysisstruct');
 
-% run movement pattern function
-m_f = analyze_movement_patterns(analysisstruct.mocapstruct_reduced_agg);
-
-% Extract conditions
 load(GC.filename_predictions, 'animal_condition_identifier');
 input_params.repfactor = GC.repfactor;
-upsampled_identifiers = repelem(animal_condition_identifier, input_params.repfactor);
-good_frames = analysisstruct.frames_with_good_tracking{1, 1};
-frame_identifiers = upsampled_identifiers(good_frames);
+
+
+% Preprocess data
+markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 15);
+
+% run movement pattern function
+m_f = analyze_movement_patterns(markers_aligned_ds);
+
+% Extract conditions
+frame_identifiers = animal_condition_identifier;
 conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_conditions = unique(conditions);
 
@@ -55,14 +63,19 @@ for f = 1%:length(fields)
             group_labels = [group_labels; repmat(unique_conditions(c), size(condition_data{c}, 1), 1)];
         end
         
+        % Perform Kruskal-Wallis test
+        [p_kw, tbl_kw, stats_kw] = kruskalwallis(all_data(:,3), group_labels, 'off');
+        
+        % Perform ANOVA test
+        [p_anova, tbl_anova, stats_anova] = anova1(all_data(:,3), group_labels, 'off');
         
         % Display results
-        fprintf('Kruskal-Wallis test for %s - %s, p-value: %.4f\n', fieldname, subfieldname, p);
+        fprintf('Kruskal-Wallis test for %s - %s, p-value: %.4f\n', fieldname, subfieldname, p_kw);
+        fprintf('ANOVA test for %s - %s, p-value: %.4f\n', fieldname, subfieldname, p_anova);
         
         % Create figure for comparison
         figure('Position', [100 100 800 600], 'Color', 'w');
       
-
         % Calculate means and SEMs for each condition
         means = zeros(1, length(unique_conditions));
         sems = zeros(1, length(unique_conditions));
@@ -71,11 +84,6 @@ for f = 1%:length(fields)
             sems(c) = std(condition_data{c}(:, 3)) / sqrt(size(condition_data{c}, 1));
         end
 
-       
-
-        % Perform Kruskal-Wallis test
-        [p, tbl, stats] = kruskalwallis(all_data(:,3), group_labels, 'off');
-        
         % Create bar plot with error bars
         b = bar(means, 'FaceColor', 'flat');
         hold on;
@@ -94,11 +102,15 @@ for f = 1%:length(fields)
         box off;
         set(gca, 'TickDir', 'out');
 
-        
         % Add significance marker if test is significant
-        if p < 0.05
+        if p_kw < 0.05
             plot(1:length(unique_conditions), max(means + sems) * 1.1 * ones(1,length(unique_conditions)), 'k-');
-            text(mean(1:length(unique_conditions)), max(means + sems) * 1.15, sprintf('p = %.3f', p), ...
+            text(mean(1:length(unique_conditions)), max(means + sems) * 1.15, sprintf('KW p = %.3f', p_kw), ...
+                'HorizontalAlignment', 'center');
+        end
+        if p_anova < 0.05
+            plot(1:length(unique_conditions), max(means + sems) * 1.2 * ones(1,length(unique_conditions)), 'k--');
+            text(mean(1:length(unique_conditions)), max(means + sems) * 1.25, sprintf('ANOVA p = %.3f', p_anova), ...
                 'HorizontalAlignment', 'center');
         end
     end

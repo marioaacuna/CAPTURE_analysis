@@ -6,20 +6,22 @@ GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
 
 % Load Data
-load(GC.filename_analysis, 'analysisstruct');
-
-% Extract conditions
+load(GC.filename_analysis, 'analysisstruct')
+load(GC.filename_ratception, 'ratception_struct');
 load(GC.filename_predictions, 'animal_condition_identifier');
 input_params.repfactor = GC.repfactor;
-upsampled_identifiers = repelem(animal_condition_identifier, input_params.repfactor);
-good_frames = analysisstruct.frames_with_good_tracking{1, 1};
-frame_identifiers = upsampled_identifiers(good_frames);
+
+% Preprocess data
+markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 15);
+
+% Extract conditions
+frame_identifiers = animal_condition_identifier;
 conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_conditions = unique(conditions);
 
 %% Analyse angles.
 % Get marker data
-markers = analysisstruct.mocapstruct_reduced_agg{1, 1}.markers_aligned_preproc;
+markers = markers_aligned_ds;
 
 % Joint positions (centered to SpineM)
 knee = markers.KneeL;
@@ -30,16 +32,10 @@ paw = markers.HindpawL;
 leg_angles = calculate_leg_angles(knee, ankle, paw);
 
 % 2. Calculate velocities of markers in 3D space
-%leg_velocities = calculate_velocity({knee, ankle, paw});
-
-% 3. Joint velocities
-fps = 8.3; % Adjust this later (granularity / expansion_factor))
+fps = 100; % Adjust this later (granularity / expansion_factor))
 knee_vel = calculate_velocity(knee, fps);
 ankle_vel = calculate_velocity(ankle, fps);
 paw_vel = calculate_velocity(paw, fps);
-
-
-% TODO: continue with the separation of conditions and statistical analysis
 
 % Separate data by conditions
 fields = {'leg_angles', 'knee_vel', 'ankle_vel', 'paw_vel'};
@@ -53,7 +49,7 @@ for f = 1:length(fields)
     if strcmp(fieldname, 'leg_angles')
         % Analyze knee and ankle angles separately
         for angle_idx = 1:2
-            angle_name = {'knee_angle', 'ankle_angle'};
+            angle_name = {'Knee Flexion/Extension', 'Ankle Dorsiflexion/Plantarflexion'};
             angle_data = data(:, angle_idx);
 
             baseline_data = angle_data(ismember(conditions, 'B'), :);
@@ -63,7 +59,7 @@ for f = 1:length(fields)
             for c = 1:length(unique_conditions)
                 condition = unique_conditions{c};
                 condition_mask = strcmp(conditions, condition);
-                condition_data{c} = angle_data(condition_mask, :) - mean(baseline_data);
+                condition_data{c} = angle_data(condition_mask, :);% - mean(baseline_data);
             end
 
             % Perform statistical analysis
@@ -75,10 +71,14 @@ for f = 1:length(fields)
             end
 
             % Perform Kruskal-Wallis test
-            [p, tbl, stats] = kruskalwallis(all_data, group_labels, 'off');
+            [p_kw, tbl_kw, stats_kw] = kruskalwallis(all_data, group_labels, 'off');
+            
+            % Perform ANOVA test
+            [p_anova, tbl_anova, stats_anova] = anova1(all_data, group_labels, 'off');
 
             % Display results
-            fprintf('Kruskal-Wallis test for %s, p-value: %.4f\n', angle_name{angle_idx}, p);
+            fprintf('Kruskal-Wallis test for %s, p-value: %.4f\n', angle_name{angle_idx}, p_kw);
+            fprintf('ANOVA test for %s, p-value: %.4f\n', angle_name{angle_idx}, p_anova);
 
             % Create figure for comparison
             figure('Position', [100 100 800 600], 'Color', 'w');
@@ -111,9 +111,14 @@ for f = 1:length(fields)
             set(gca, 'TickDir', 'out');
 
             % Add significance marker if test is significant
-            if p < 0.05
+            if p_kw < 0.05
                 plot(1:length(unique_conditions), max(means + sems) * 1.1 * ones(1, length(unique_conditions)), 'k-');
-                text(mean(1:length(unique_conditions)), max(means + sems) * 1.15, sprintf('p = %.3f', p), ...
+                text(mean(1:length(unique_conditions)), max(means + sems) * 1.15, sprintf('KW p = %.3f', p_kw), ...
+                    'HorizontalAlignment', 'center');
+            end
+            if p_anova < 0.05
+                plot(1:length(unique_conditions), max(means + sems) * 1.2 * ones(1, length(unique_conditions)), 'k--');
+                text(mean(1:length(unique_conditions)), max(means + sems) * 1.25, sprintf('ANOVA p = %.3f', p_anova), ...
                     'HorizontalAlignment', 'center');
             end
         end
@@ -125,7 +130,7 @@ for f = 1:length(fields)
         for c = 1:length(unique_conditions)
             condition = unique_conditions{c};
             condition_mask = strcmp(conditions, condition);
-            condition_data{c} = data(condition_mask, :) - mean(baseline_data);
+            condition_data{c} = data(condition_mask, :); %- mean(baseline_data);
         end
 
         % Perform statistical analysis
@@ -137,10 +142,14 @@ for f = 1:length(fields)
         end
 
         % Perform Kruskal-Wallis test
-        [p, tbl, stats] = kruskalwallis(all_data(:, 1), group_labels, 'off'); % Example for first column
+        [p_kw, tbl_kw, stats_kw] = kruskalwallis(all_data(:, 1), group_labels, 'off'); % Example for first column
+        
+        % Perform ANOVA test
+        [p_anova, tbl_anova, stats_anova] = anova1(all_data(:, 1), group_labels, 'off');
 
         % Display results
-        fprintf('Kruskal-Wallis test for %s, p-value: %.4f\n', fieldname, p);
+        fprintf('Kruskal-Wallis test for %s, p-value: %.4f\n', fieldname, p_kw);
+        fprintf('ANOVA test for %s, p-value: %.4f\n', fieldname, p_anova);
 
         % Create figure for comparison
         figure('Position', [100 100 800 600], 'Color', 'w');
@@ -173,9 +182,14 @@ for f = 1:length(fields)
         set(gca, 'TickDir', 'out');
 
         % Add significance marker if test is significant
-        if p < 0.05
+        if p_kw < 0.05
             plot(1:length(unique_conditions), max(means + sems) * 1.1 * ones(1, length(unique_conditions)), 'k-');
-            text(mean(1:length(unique_conditions)), max(means + sems) * 1.15, sprintf('p = %.3f', p), ...
+            text(mean(1:length(unique_conditions)), max(means + sems) * 1.15, sprintf('KW p = %.3f', p_kw), ...
+                'HorizontalAlignment', 'center');
+        end
+        if p_anova < 0.05
+            plot(1:length(unique_conditions), max(means + sems) * 1.2 * ones(1, length(unique_conditions)), 'k--');
+            text(mean(1:length(unique_conditions)), max(means + sems) * 1.25, sprintf('ANOVA p = %.3f', p_anova), ...
                 'HorizontalAlignment', 'center');
         end
     end
@@ -183,42 +197,3 @@ end
 
 disp('done')
 
-function angles = calculate_leg_angles(knee, ankle, paw)
-    % this function calculates the angles between the segments of the leg
-    % knee, ankle and paw are the 3D coordinates of the markers
-    % output is a matrix with the angles between the segments
-    % where the first column is the knee angle and the second column is the ankle angle
-
-    num_frames = size(knee, 1);
-    angles = zeros(num_frames, 2); % [knee_angle, ankle_angle]
-    
-    for i = 1:num_frames
-        % Vectors for segments
-        thigh_vec = knee(i,:);  % From origin (SpineM) to knee
-        shank_vec = ankle(i,:) - knee(i,:);
-        foot_vec = paw(i,:) - ankle(i,:);
-        
-        % For knee angle
-        % Get the cross product to determine rotation direction
-        cross_knee = cross(thigh_vec, shank_vec);
-        % Use sign of y-component (assuming sagittal plane primary motion)
-        knee_direction = sign(cross_knee(2));
-        % Calculate magnitude
-        knee_mag = acosd(dot(-thigh_vec, shank_vec) / (norm(thigh_vec) * norm(shank_vec)));
-        % Apply direction
-        angles(i,1) = knee_direction * knee_mag;
-        
-        % For ankle angle
-        cross_ankle = cross(shank_vec, foot_vec);
-        ankle_direction = sign(cross_ankle(2));
-        ankle_mag = acosd(dot(-shank_vec, foot_vec) / (norm(shank_vec) * norm(foot_vec)));
-        angles(i,2) = ankle_direction * ankle_mag;
-    end
-end
-
-function vel = calculate_velocity(position, fps)
-    % Calculate velocity using central difference
-    vel = diff(position) * fps;
-    % Add duplicate of last velocity to match original length
-    vel = [vel; vel(end,:)];
-end
