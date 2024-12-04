@@ -348,65 +348,193 @@ function d = kldiv(p, q)
     d = sum(p .* log2(p./q));
 end
 
-%% 2.2 Transition Matrix Analysis
+%% 2.2 Analysis Cluster sequences (Transition matrix, dwell times, etc)
 disp('Performing Transition Matrix Analysis...');
 
 unique_animals = unique(animal_ids);
 
 % Initialize a cell array to store transition matrices per condition
-transition_matrices = cell(num_conditions, 1);
-avg_offdiag_probs = cell(num_conditions, 1);
+transition_matrices             = cell(num_conditions, 1);
+avg_offdiag_probs               = cell(num_conditions, 1);
+avg_behavior_predictability     = cell(num_conditions, 1);
+avg_mean_dwell_time_sec         = cell(num_conditions, 1);
+avg_transitions_per_minute      = cell(num_conditions, 1);
+
 
 
 for cond_idx = 1:num_conditions
-    condition = unique_conditions{cond_idx};
-    condition_matrices = [];
-    condition_avg_probs = [];
-
+    condition                   = unique_conditions{cond_idx};
+    condition_matrices          = [];
+    condition_avg_probs         = [];
+    behavioral_predictability   = [];
+    mean_dwell_time_sec         = [];
+    transitions_per_minute      = [];
     
     for animal_idx = 1:length(unique_animals)
         animal = unique_animals{animal_idx};
         
         % Get indices for this animal and condition
         animal_cond_mask = strcmp(conditions, condition) & strcmp(animal_ids(animal_indices), animal);
-        
+        if sum(animal_cond_mask) == 0, continue, end
         % Get cluster sequence for this animal and condition
-        clusters_seq = cluster_ids(animal_cond_mask);
-        
+        clusters_seq_total = cluster_ids(animal_cond_mask);
+
+        % Filter cluster sequences
+        cluster_seq = filterTransientTransitions(clusters_seq_total);
+
+        % Calculate dwell time (dwell is a structure, with fieldnames:  
+        % mean_dwell_time_sec: 0.7279
+        % median_dwell_time_sec: 
+        % transitions_per_minute: 
+        % dwell_times:
+        % transition_patterns: 
+        % temporal_context:
+        dwell = analyze_sequence_in_time(cluster_seq);
+
+        % Analysis Transition matrix
         if length(clusters_seq) > 1
             % Compute transition matrix for this sequence
-            num_clusters = max(unique_clusters);
-            T = zeros(num_clusters, num_clusters);
-            
-            for i = 1:length(clusters_seq)-1
-                from = clusters_seq(i);
-                to = clusters_seq(i+1);
-                T(from, to) = T(from, to) + 1;
+            uni_clusters = unique(cluster_seq);
+            n_observed = length(uni_clusters);
+
+            % Create mapping for cluster indices
+            cluster_map = containers.Map(uni_clusters, 1:n_observed);
+
+            % Initialize matrix with correct size
+            T = zeros(n_observed, n_observed);
+
+            % Count transitions using original cluster numbers
+            for i = 1:length(cluster_seq)-1
+                from_idx = find(uni_clusters == cluster_seq(i));
+                to_idx = find(uni_clusters == cluster_seq(i+1));
+                T(from_idx, to_idx) = T(from_idx, to_idx) + 1;
             end
-            
-            % Normalize transition matrix
+
+            % Normalize
             T = T ./ sum(T, 2);
-            T(isnan(T)) = 0;
+
+            % Total entropy of the transition matrix (uncertainty of next state)
+            H = 0;
+            total_transitions = sum(sum(T > 0));
+            for i = 1:size(T,1)
+                row = T(i,:);
+                if any(row > 0)
+                    row_weight = sum(row > 0) / total_transitions;
+                    h_i = -sum(row(row > 0) .* log2(row(row > 0)));
+                    H = H + h_i * row_weight;
+                end
+            end
+            % H = (H / n_active_rows);
+            H_max = log2(size(T,1));
+            predictability = 1 - (H/H_max);
+            
+            % % Markovian analysis
+            % [~, D] = eig(T);
+            % eigenvalues = sort(abs(diag(D)), 'descend');
+            % 
+            % % Second largest eigenvalue indicates mixing rate
+            % lambda2 = eigenvalues(2);  % First eigenvalue should be 1
+            % 
+            % % Markovian predictability (closer to 1 means more predictable)
+            % predictability = lambda2;
+
 
             % Extract off-diagonal elements excluding zeros
-            off_diag_indices = ~eye(num_clusters);
+            off_diag_indices = ~eye(n_observed);
             off_diag_elements = T(off_diag_indices & T > 0);
             if ~isempty(off_diag_elements)
                 avg_prob = mean(off_diag_elements);
                 % Store average off-diagonal probability
                 condition_avg_probs = [condition_avg_probs; avg_prob];
+                behavioral_predictability = [behavioral_predictability; predictability];
+            end
+
+            
+            % get total Ttotal, using all clusters
+            Ttotal = zeros(num_clusters+1, num_clusters+1);
+            
+            for i = 1:length(clusters_seq_total)-1
+                from = clusters_seq_total(i);
+                to = clusters_seq_total(i+1);
+                Ttotal(from, to) = Ttotal(from, to) + 1;
             end
             
+            % Normalize transition matrix
+            Ttotal = Ttotal ./ sum(Ttotal, 2);
+            Ttotal(isnan(Ttotal)) = 0;
+
             % Store transition matrix
-            condition_matrices = cat(3, condition_matrices, T);
+            condition_matrices = cat(3, condition_matrices, Ttotal);
         end
+        mean_dwell_time_sec =  [mean_dwell_time_sec;dwell.mean_dwell_time_sec];
+        transitions_per_minute =  [transitions_per_minute;dwell.transitions_per_minute];
     end
     
     % Store all matrices for this condition
-    transition_matrices{cond_idx} = condition_matrices;
-    avg_offdiag_probs{cond_idx} = condition_avg_probs;
+    transition_matrices{cond_idx}               = condition_matrices;
+    avg_offdiag_probs{cond_idx}                 = condition_avg_probs;
+    avg_behavior_predictability{cond_idx}       = behavioral_predictability;
+    avg_mean_dwell_time_sec{cond_idx}           = mean_dwell_time_sec;
+    avg_transitions_per_minute{cond_idx}        = transitions_per_minute;
+
+
 
 end
+
+% --- ANALYSIS ACROSS CONDITIONS ---
+%% Visualizations
+% Analysis of dwell time and transitions per minute
+% Visualize avg_behavior_predictability
+figure('Position', [100 100 800 600], 'Color', 'w');
+means = cellfun(@mean, avg_behavior_predictability);
+sems = cellfun(@(x) std(x) / sqrt(length(x)), avg_behavior_predictability);
+b = bar(means, 'FaceColor', 'flat');
+hold on;
+errorbar(1:num_conditions, means, sems, 'k', 'LineStyle', 'none', 'CapSize', 10);
+for cond_idx = 1:num_conditions
+    b.CData(cond_idx,:) = colors(cond_idx,:);
+end
+xlabel('Condition');
+ylabel('Average Behavior Predictability');
+ylim([0.90 1.0])
+title('Behavior Predictability Across Conditions');
+set(gca, 'XTick', 1:num_conditions, 'XTickLabel', unique_conditions);
+box off;
+set(gca, 'TickDir', 'out');
+
+% Visualize avg_mean_dwell_time_sec
+figure('Position', [100 100 800 600], 'Color', 'w');
+means = cellfun(@mean, avg_mean_dwell_time_sec);
+sems = cellfun(@(x) std(x) / sqrt(length(x)), avg_mean_dwell_time_sec);
+b = bar(means, 'FaceColor', 'flat');
+hold on;
+errorbar(1:num_conditions, means, sems, 'k', 'LineStyle', 'none', 'CapSize', 10);
+for cond_idx = 1:num_conditions
+    b.CData(cond_idx,:) = colors(cond_idx,:);
+end
+xlabel('Condition');
+ylabel('Average Mean Dwell Time (sec)');
+title('Mean Dwell Time Across Conditions');
+set(gca, 'XTick', 1:num_conditions, 'XTickLabel', unique_conditions);
+box off;
+set(gca, 'TickDir', 'out');
+
+% Visualize avg_transitions_per_minute
+figure('Position', [100 100 800 600], 'Color', 'w');
+means = cellfun(@mean, avg_transitions_per_minute);
+sems = cellfun(@(x) std(x) / sqrt(length(x)), avg_transitions_per_minute);
+b = bar(means, 'FaceColor', 'flat');
+hold on;
+errorbar(1:num_conditions, means, sems, 'k', 'LineStyle', 'none', 'CapSize', 10);
+for cond_idx = 1:num_conditions
+    b.CData(cond_idx,:) = colors(cond_idx,:);
+end
+xlabel('Condition');
+ylabel('Average Transitions Per Minute');
+title('Transitions Per Minute Across Conditions');
+set(gca, 'XTick', 1:num_conditions, 'XTickLabel', unique_conditions);
+box off;
+set(gca, 'TickDir', 'out');
 
 % Average transition matrices for each condition
 avg_transition_matrices = cell(num_conditions,1);
