@@ -1,0 +1,271 @@
+% 1. Initialization
+clear;
+close all;
+clc;
+GC = general_configs;
+rootpath = GC.preprocessing_rootpath;
+
+% Load Data
+load(GC.filename_analysis, 'analysisstruct')
+load(GC.filename_ratception, 'ratception_struct');
+load(GC.filename_predictions, 'animal_condition_identifier');
+input_params.repfactor = GC.repfactor;
+
+% Preprocess data
+markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 50);
+markers_not_aligned_ds = load_aligned_markers(ratception_struct.markers_preproc, input_params.repfactor, 50);
+% Extract conditions
+frame_identifiers = animal_condition_identifier;
+conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
+unique_conditions = unique(conditions);
+
+%% 2.1 calculate walking based on 2D positions
+% Basic usage
+% walking_bouts = detectWalkingFrom2D(markers_not_aligned_ds.SpineM);
+
+% With custom parameters
+params = struct();
+params.velocity_percentile = 87; % More stringent threshold
+params.min_bout_duration = 0.1; % Longer minimum bout
+params.sampling_rate = 100; % Hz
+params.smoothing_window = 5; % frames
+params.z_smoothing_window = 5;
+params.z_threshold_percentile = 99.3;  % Threshold for Z displacement
+params.direction_threshold = 75;  % Max angle deviation from heading (degrees)
+
+[walking_bouts, metrics] = detectWalkingFrom2D(markers_not_aligned_ds.SpineM,markers_not_aligned_ds.Snout, params);
+
+%% 3. Analysis of angles at walking in egocentric reference
+markers = markers_aligned_ds;
+
+% Joint positions (centered to SpineM)
+spineM = markers.SpineM;
+spineF = markers.SpineF;
+% Left leg
+kneeL = markers.KneeL;
+ankleL = markers.AnkleL;
+pawL = markers.HindpawL;
+
+% Right leg
+kneeR = markers.KneeR;
+ankleR = markers.AnkleR;
+pawR = markers.HindpawR;
+
+% Calculate angles between markers in 3D space
+l_leg_angles = calculate_leg_angles(spineM, spineF, kneeL, ankleL, pawL); % knee, ankle, hip
+r_leg_angles = calculate_leg_angles(spineM, spineF, kneeR, ankleR, pawR); % knee, ankle, hip
+
+% Sample the walking bouts
+l_leg_angles_at_walking = l_leg_angles(walking_bouts,:);
+r_leg_angles_at_walking = r_leg_angles(walking_bouts,:);
+%%
+% Collect data for all angles and legs
+angle_names = {'Knee', 'Ankle', 'Hip'};
+data_struct = struct('left_leg', l_leg_angles_at_walking, ...
+                     'right_leg', r_leg_angles_at_walking);
+
+fields = fieldnames(data_struct);
+
+n_angles = size(l_leg_angles,2);
+
+all_data = struct();
+for angle_idx = 1:n_angles
+    angle_name = angle_names{angle_idx};
+    all_data.(angle_name) = struct();
+    for f = 1:length(fields)
+        fieldname = fields{f};
+        data = data_struct.(fieldname);
+        angle_data = data(:, angle_idx);
+
+        % Initialize cell array to store data for each condition
+        condition_data = cell(length(unique_conditions), 1);
+        for c = 1:length(unique_conditions)
+            condition = unique_conditions{c};
+            condition_mask = strcmp(conditions(walking_bouts), condition);
+            condition_data{c} = angle_data(condition_mask, :);
+        end
+        all_data.(angle_name).(fieldname) = condition_data;
+    end
+end
+
+% Plotting
+for angle_idx = 1:n_angles
+    angle_name = angle_names{angle_idx};
+    condition_data_left = all_data.(angle_name).left_leg;
+    condition_data_right = all_data.(angle_name).right_leg;
+
+    % Calculate means and SEMs for each condition
+    means_left = zeros(1, length(unique_conditions));
+    sems_left = zeros(1, length(unique_conditions));
+    means_right = zeros(1, length(unique_conditions));
+    sems_right = zeros(1, length(unique_conditions));
+    for c = 1:length(unique_conditions)
+        means_left(c) = median(condition_data_left{c});
+        sems_left(c) = std(condition_data_left{c}) / sqrt(size(condition_data_left{c}, 1));
+        means_right(c) = median(condition_data_right{c});
+        sems_right(c) = std(condition_data_right{c}) / sqrt(size(condition_data_right{c}, 1));
+    end
+
+    % Create figure for comparison
+    figure('Position', [100 100 800 600], 'Color', 'w');
+
+    % Create bar plot with error bars
+    b = bar([means_left; means_right]', 'grouped');
+    hold on;
+    errorbar((1:length(unique_conditions)) - 0.15, means_left, sems_left, 'k', 'LineStyle', 'none', 'CapSize', 10);
+    errorbar((1:length(unique_conditions)) + 0.15, means_right, sems_right, 'k', 'LineStyle', 'none', 'CapSize', 10);
+
+    % Customize plot
+    colors = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], [0.9290 0.6940 0.1250], ...
+              [0.4940 0.1840 0.5560], [0.4660 0.6740 0.1880]};
+    for k = 1:2
+        b(k).FaceColor = 'flat';
+        for c = 1:length(unique_conditions)
+            b(k).CData(c,:) = colors{c};
+        end
+    end
+
+    xlabel('Condition');
+    ylabel(angle_name);
+    title(sprintf('%s Across Conditions', angle_name), 'Interpreter', 'none');
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    box off;
+    set(gca, 'TickDir', 'out');
+
+    % Set y-axis limits
+    if strcmp(angle_name, 'Knee')
+        ylim([80 100]);
+    elseif strcmp(angle_name, 'Ankle')
+        ylim([90 130]);
+    elseif strcmp(angle_name, 'Hip')
+        ylim([50 70]);
+    end
+end
+
+disp('done')
+
+
+% TODO Perform analysis per animal per condition, some animals are present in
+% more than one condition. Do the analysis per condition, averaging the
+% data per animal in each donition
+%% 
+% Extract animal identifiers
+animal_ids = cellfun(@(x) x(1:end-1), frame_identifiers, 'UniformOutput', false);
+unique_animals = unique(animal_ids);
+
+% Collect data for all angles and legs per animal per condition
+all_data_animal_condition = struct();
+for angle_idx = 1:n_angles
+    angle_name = angle_names{angle_idx};
+    all_data_animal_condition.(angle_name) = struct();
+    for f = 1:length(fields)
+        fieldname = fields{f};
+        data = data_struct.(fieldname);
+        angle_data = data(:, angle_idx);
+
+        % Initialize cell array to store data for each animal per condition
+        animal_condition_data = cell(length(unique_conditions), length(unique_animals));
+        for c = 1:length(unique_conditions)
+            condition = unique_conditions{c};
+            condition_mask = strcmp(conditions(walking_bouts), condition);
+            for a = 1:length(unique_animals)
+                animal = unique_animals{a};
+                animal_mask = strcmp(animal_ids(walking_bouts), animal);
+                combined_mask = condition_mask & animal_mask;
+                animal_condition_data{c, a} = angle_data(combined_mask, :);
+            end
+        end
+        all_data_animal_condition.(angle_name).(fieldname) = animal_condition_data;
+    end
+end
+
+% Plotting per condition, averaging per animal
+for angle_idx = 1:n_angles
+    angle_name = angle_names{angle_idx};
+    animal_condition_data_left = all_data_animal_condition.(angle_name).left_leg;
+    animal_condition_data_right = all_data_animal_condition.(angle_name).right_leg;
+
+    % Calculate means and SEMs for each condition, averaging per animal
+    means_left_condition = zeros(1, length(unique_conditions));
+    sems_left_condition = zeros(1, length(unique_conditions));
+    means_right_condition = zeros(1, length(unique_conditions));
+    sems_right_condition = zeros(1, length(unique_conditions));
+    for c = 1:length(unique_conditions)
+        animal_means_left = cellfun(@mean, animal_condition_data_left(c, :));
+        animal_means_right = cellfun(@mean, animal_condition_data_right(c, :));
+        means_left_condition(c) = nanmean(animal_means_left);
+        sems_left_condition(c) = nanstd(animal_means_left) / sqrt(length(animal_means_left));
+        means_right_condition(c) = nanmean(animal_means_right);
+        sems_right_condition(c) = nanstd(animal_means_right) / sqrt(length(animal_means_right));
+    end
+
+    % Create figure for comparison
+    figure('Position', [100 100 800 600], 'Color', 'w');
+
+    % Create bar plot with error bars
+    b = bar([means_left_condition; means_right_condition]', 'grouped');
+    hold on;
+    errorbar((1:length(unique_conditions)) - 0.15, means_left_condition, sems_left_condition, 'k', 'LineStyle', 'none', 'CapSize', 10);
+    errorbar((1:length(unique_conditions)) + 0.15, means_right_condition, sems_right_condition, 'k', 'LineStyle', 'none', 'CapSize', 10);
+
+    % Customize plot
+    colors = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], [0.9290 0.6940 0.1250], ...
+              [0.4940 0.1840 0.5560], [0.4660 0.6740 0.1880]};
+    for k = 1:2
+        b(k).FaceColor = 'flat';
+        for c = 1:length(unique_conditions)
+            b(k).CData(c,:) = colors{c};
+        end
+    end
+
+    xlabel('Condition');
+    ylabel(angle_name);
+    title(sprintf('%s Across Conditions', angle_name), 'Interpreter', 'none');
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    box off;
+    set(gca, 'TickDir', 'out');
+
+    % Set y-axis limits
+    if strcmp(angle_name, 'Knee')
+        ylim([80 100]);
+    elseif strcmp(angle_name, 'Ankle')
+        ylim([90 130]);
+    elseif strcmp(angle_name, 'Hip')
+        ylim([50 70]);
+    end
+end
+
+disp('done')
+
+%% This code is to check only.
+% % Create a video reader object
+% videoObj = VideoReader('K:\Mario\BioMed_students_2023\Anna\exp_6cam_miniscope_data\baseline\6cam_data\ID_1378\20240923\videos\Camera1\0.mp4');
+% 
+% % Get video properties
+% numFrames = videoObj.NumFrames;
+% 
+% % Assuming walking_bouts is a logical array with same length as number of frames
+% % If not already created, you'll need to generate this based on your analysis
+% 
+% % Initialize array to store extracted frames
+% extractedFrames = {};
+% frameIndices = [];
+% 
+% % Read and process frames
+% for frameNum = 1:10000
+%     % Read current frame
+%     currentFrame = read(videoObj, frameNum);
+% 
+%     % Check if this frame has walking activity
+% 
+%     % Store the frame
+%     extractedFrames{end+1} = currentFrame;
+%     frameIndices = [frameIndices frameNum];
+% 
+% end
+figure
+for iv = 1:length(extractedFrames)
+    if walking_bouts(iv)
+        imshow(extractedFrames{iv});
+    end
+end

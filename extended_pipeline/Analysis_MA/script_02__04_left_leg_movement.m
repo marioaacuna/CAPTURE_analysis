@@ -12,7 +12,7 @@ load(GC.filename_predictions, 'animal_condition_identifier');
 input_params.repfactor = GC.repfactor;
 
 % Preprocess data
-markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 15);
+markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 30);
 
 % Extract conditions
 frame_identifiers = animal_condition_identifier;
@@ -24,12 +24,14 @@ unique_conditions = unique(conditions);
 markers = markers_aligned_ds;
 
 % Joint positions (centered to SpineM)
+spineM = markers.SpineM;
+spineF = markers.SpineF;
 knee = markers.KneeL;
 ankle = markers.AnkleL;
 paw = markers.HindpawL;
 
 % 1. Calculate angles between markers in 3D space
-leg_angles = calculate_leg_angles(knee, ankle, paw);
+leg_angles = calculate_leg_angles(spineM, spineF, knee, ankle, paw); % knee, ankle, hip
 
 % 2. Calculate velocities of markers in 3D space
 fps = 100; % Adjust this later (granularity / expansion_factor))
@@ -48,8 +50,8 @@ for f = 1:length(fields)
 
     if strcmp(fieldname, 'leg_angles')
         % Analyze knee and ankle angles separately
-        for angle_idx = 1:2
-            angle_name = {'Knee Flexion/Extension', 'Ankle Dorsiflexion/Plantarflexion'};
+        for angle_idx = 1:3
+            angle_name = {'Knee Flexion/Extension', 'Ankle Dorsiflexion/Plantarflexion', 'Hip flexion/extension'};
             angle_data = data(:, angle_idx);
 
             baseline_data = angle_data(ismember(conditions, 'B'), :);
