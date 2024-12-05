@@ -33,7 +33,9 @@ params.z_smoothing_window = 5;
 params.z_threshold_percentile = 99.3;  % Threshold for Z displacement
 params.direction_threshold = 75;  % Max angle deviation from heading (degrees)
 
-[walking_bouts, metrics] = detectWalkingFrom2D(markers_not_aligned_ds.SpineM,markers_not_aligned_ds.Snout, params);
+free_SpineM = markers_not_aligned_ds.SpineM;
+free_Snout = markers_not_aligned_ds.Snout;
+[walking_bouts, metrics] = detectWalkingFrom2D(free_SpineM,free_Snout, params);
 
 %% 3. Analysis of angles at walking in egocentric reference
 markers = markers_aligned_ds;
@@ -237,6 +239,12 @@ end
 
 disp('done')
 
+%% Next step
+% TODO: analyse trajectories of the main markers for left and right paw while walking)
+
+
+
+
 %% This code is to check only.
 % % Create a video reader object
 % videoObj = VideoReader('K:\Mario\BioMed_students_2023\Anna\exp_6cam_miniscope_data\baseline\6cam_data\ID_1378\20240923\videos\Camera1\0.mp4');
@@ -263,9 +271,9 @@ disp('done')
 %     frameIndices = [frameIndices frameNum];
 % 
 % end
-figure
-for iv = 1:length(extractedFrames)
-    if walking_bouts(iv)
-        imshow(extractedFrames{iv});
-    end
-end
+%figure
+%for iv = 1:length(extractedFrames)
+%    if walking_bouts(iv)
+%        imshow(extractedFrames{iv});
+%    end
+%end
