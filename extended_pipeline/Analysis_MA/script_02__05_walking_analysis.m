@@ -50,6 +50,25 @@ cycles = analyze_gait_cycles_3d(markers,walking_bouts, params);
 
 % TODO: Separate the analysis into walking bouts for each condition
 
+CYCLES = struct();
+% Separate data by conditions
+for c = 1:length(unique_conditions)
+    condition = unique_conditions{c};
+    condition_mask = strcmp(conditions, condition) ;
+    
+    % Perform gait analysis for each condition
+    fprintf('Gait analysis for condition: %s\n', condition);
+    
+    % Restrict markers to current condition
+    condition_markers = structfun(@(x) x(condition_mask, :), markers, 'UniformOutput', false);
+    
+    % Analyze gait cycles for the current condition
+    cycles = analyze_gait_cycles_3d(condition_markers, walking_bouts(strcmp(conditions, condition)), params);
+    
+    CYCLES.(condition) = cycles;
+end
+
+disp('done')
 
 %% --- END OF SCRIPT ---
 
