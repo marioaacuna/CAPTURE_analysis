@@ -19,7 +19,7 @@ frame_identifiers = animal_condition_identifier;
 conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_conditions = unique(conditions);
 
-%% 2.1 calculate walking based on 2D positions
+%% 2.1 calculate walking bouts based on 2D positions (x,y)
 % Basic usage
 % walking_bouts = detectWalkingFrom2D(markers_not_aligned_ds.SpineM);
 
@@ -49,11 +49,10 @@ analyze_angles(markers, walking_bouts, conditions, unique_conditions, frame_iden
 
 disp('done')
 
-%% 4. Kinematic analysis
-cycles = analyze_gait_cycles_3d(markers, walking_bouts, params);
+%% 4. Kinematic analysis of gait cycles
+cycles_all = analyze_gait_cycles_3d(markers, walking_bouts, params);
 
-% TODO: Separate the analysis into walking bouts for each condition
-%%
+%% 4.1 Kinematics of gait cycles per condition
 CYCLES = struct();
 % Separate data by conditions
 for c = 1:length(unique_conditions)
