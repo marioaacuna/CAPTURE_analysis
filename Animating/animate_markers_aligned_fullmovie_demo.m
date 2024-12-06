@@ -29,12 +29,12 @@ set(gca,'Xcolor',[1 1 1 ]);
 set(gca,'Ycolor',[1 1 1]);
 set(gca,'Zcolor',[1 1 1]);
 
-% zlim([-110 170])
-% xlim([-140 140])
-% ylim([-140 140])
-zlim([-20 50])
-xlim([-80 80])
-ylim([-80 80])
+zlim([-110 170])
+xlim([-140 140])
+ylim([-140 140])
+% zlim([-20 50])
+% xlim([-80 80])
+% ylim([-80 80])
 
 
 
@@ -99,7 +99,7 @@ for lk = reshape(frame_inds,1,[])%1:10:10000
             end
         end
     end
-
+    title(lk)
     drawnow
     hold off
 

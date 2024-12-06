@@ -12,8 +12,8 @@ load(GC.filename_predictions, 'animal_condition_identifier');
 input_params.repfactor = GC.repfactor;
 
 % Preprocess data
-markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 50);
-markers_not_aligned_ds = load_aligned_markers(ratception_struct.markers_preproc, input_params.repfactor, 50);
+markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 10);
+markers_not_aligned_ds = load_aligned_markers(ratception_struct.markers_preproc, input_params.repfactor, 15);
 % Extract conditions
 frame_identifiers = animal_condition_identifier;
 conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
@@ -46,13 +46,10 @@ analyze_angles(markers, walking_bouts, conditions, unique_conditions, frame_iden
 disp('done')
 
 %% 4. Kinematic analysis
-plot_gait_trajectories(markers, walking_bouts, params)
-analyze_gait_cycles_3d(markers,walking_bouts, params)
+cycles = analyze_gait_cycles_3d(markers,walking_bouts, params);
 
-% TODO
+% TODO: Separate the analysis into walking bouts for each condition
+
 
 %% --- END OF SCRIPT ---
-
-%% Next step
-% TODO: analyse trajectories of the main markers for left and right paw while walking
 

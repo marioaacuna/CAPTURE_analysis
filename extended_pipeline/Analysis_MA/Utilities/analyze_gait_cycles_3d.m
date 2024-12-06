@@ -1,4 +1,4 @@
-function analyze_gait_cycles_3d(markers_aligned, walking_bouts, params)
+function all_cycles = analyze_gait_cycles_3d(markers_aligned, walking_bouts, params)
 % The 3 dimensions in aligned_cycles(1).wrist_l are:
 % 
 % Heading direction (forward/backward movement)
@@ -14,7 +14,7 @@ function analyze_gait_cycles_3d(markers_aligned, walking_bouts, params)
    all_cycles = process_walking_bouts(markers, walking_bouts, params);
    
    % Align and analyze cycles
-   aligned_cycles = align_cycles_3d(all_cycles, params);
+   % aligned_cycles = align_cycles_3d(all_cycles, params);
    
    % Visualize results
    if params.plot_results
@@ -26,17 +26,17 @@ end
 function params = initialize_params(params)
    default_params = struct(...
        'sampling_rate', 100,...       % Data acquisition frequency (Hz)
-       'min_segment_duration', 1.2,...    % Minimum duration of valid walking bout (seconds)
-       'min_cycle_length', 0.2,...     % Minimum duration of gait cycle (seconds)
-       'max_cycle_length', 1,...     % Maximum duration of gait cycle (seconds)
+       'min_segment_duration', 0.9,...    % Minimum duration of valid walking bout (seconds)
+       'min_cycle_length', 0.25,...     % Minimum duration of gait cycle (seconds)
+       'max_cycle_length', 2,...     % Maximum duration of gait cycle (seconds)
        'window_size', 5,...            % Smoothing window size (samples)
-       'cycle_window', [-0.2 0.2],...  % Time window for cycle normalization (seconds)
+       'cycle_window', [-0.5 0.5],...  % Time window for cycle normalization (seconds)
        'n_normalized_points', 200,... % Number of points after interpolation
        'interp_method', 'pchip',...    % Interpolation method (pchip/linear/spline)
-       'cycle_detection_method', 'peak_detection',... % Method for detecting cycles
+       'cycle_detection_method', 'phase_space',... % Method for detecting cycles, phase_space, peak_detection, zero_crossing
        'alignment_method', 'fixed_window',... % Time normalization approach
-       'plot_results', true,...        % Enable/disable plotting
-       'plot_dimensions', {{'X (Forward)', 'Y (Lateral)', 'Z (Vertical)'}},... % Axis labels
+       'plot_results', false,...        % Enable/disable plotting
+       'plot_dimensions', {{'Time (AU)', 'Sagittal'}},... % Axis labels
        'marker_colors', {{[0.5 0 0.5], [1 0 0], [0 1 1], [1 1 0]}}); % Colors for each marker
 
    params = merge_structs(default_params, params);
@@ -66,93 +66,283 @@ function all_cycles = process_walking_bouts(markers, walking_bouts, params)
        end
        
        norm_markers = normalize_markers_3d(markers, segment_idx);
-       [cycles, valid] = detect_cycles(norm_markers, params);
+       [cycles] = detect_cycles(norm_markers, params);
        
-       all_cycles = store_valid_cycles(cycles, valid, all_cycles, cycle_count);
-       cycle_count = cycle_count + length(valid);
+       all_cycles = store_valid_cycles(cycles, all_cycles, cycle_count);
+       cycle_count = cycle_count + 1;
    end
 end
 
-function [cycles, valid] = detect_cycles(norm_markers, params)
-   marker_names = fieldnames(norm_markers);
-   cycles = struct();
-   
-   % Get cycle indices based on combined marker motions
-   switch params.cycle_detection_method
-       case 'zero_crossing'
-           [starts, ends] = detect_by_zero_crossing(norm_markers, marker_names, params);
-       case 'peak_detection'
-           [starts, ends] = detect_by_peaks(norm_markers, marker_names, params);
-       case 'phase_space'
-           [starts, ends] = detect_by_phase(norm_markers, marker_names, params);
-   end
-   
-   [cycles, valid] = extract_valid_cycles(norm_markers, starts, ends, params);
+function marker_cycles = detect_cycles(markers, params)
+    marker_cycles = struct();
+    marker_names = fieldnames(markers);
+    for i = 1:length(marker_names)
+        if ~strcmp(marker_names{i}, 'spine_m')
+            marker = markers.(marker_names{i});
+            sagittal = compute_sagittal_position(marker);
+            norm_sagittal = sagittal - mean(sagittal);
+               
+            % Find both positive and negative crossings
+            pos_crossings = find(diff(sign(norm_sagittal)) > 0);
+            % neg_crossings = find(diff(sign(norm_sagittal)) < 0);
+            
+            % Initialize storage for cycles
+            cycles = {};
+            
+            % Extract cycles using positive crossings (could also use negative)
+            for icr = 1:length(pos_crossings)-1
+                start_idx = pos_crossings(icr);
+                end_idx = pos_crossings(icr+1);
+                
+                % Extract cycle
+                cycle = norm_sagittal(start_idx:end_idx);
+                
+                % Check if cycle length is valid
+                if length(cycle) >= params.min_cycle_length*params.sampling_rate &&...
+                        length(cycle) <= params.max_cycle_length*params.sampling_rate
+                    cycles{end+1} = cycle;
+                end
+            end
+            
+        
+            % Align cycles to same length using interpolation
+            n_points = params.n_normalized_points;  % e.g., 100 points
+            aligned_cycles = zeros(length(cycles), n_points);
+            
+            for ic = 1:length(cycles)
+                % Create time vectors for interpolation
+                t_orig = linspace(0, 1, length(cycles{ic}));
+                t_normalized = linspace(0, 1, n_points);
+                
+                % Interpolate to normalized length
+                aligned_cycles(ic,:) = interp1(t_orig, cycles{ic}, t_normalized, 'pchip');
+            end
+
+        end
+
+           marker_cycles.(marker_names{i})= aligned_cycles;
+    end
+
 end
+% 
+% function [cycles, valid] = detect_cycles(norm_markers, params)
+%    marker_names = fieldnames(norm_markers);
+%    cycles = struct();
+% 
+%    % Get cycle indices based on combined marker motions
+%    switch params.cycle_detection_method
+%        case 'zero_crossing'
+%            [starts, ends] = detect_by_zero_crossing(norm_markers, marker_names, params);
+%        case 'peak_detection'
+%            [starts, ends] = detect_by_peaks(norm_markers, marker_names, params);
+%        case 'phase_space'
+%            [marker_cycles] = detect_by_phase(norm_markers, marker_names, params);
+%    end
+% 
+%    % [cycles, valid] = extract_valid_cycles(norm_markers, starts, ends, params);
+% end
 
 function [starts, ends] = detect_by_zero_crossing(markers, marker_names, params)
-   combined_signals = [];
-   
-   % Combine signals from all markers
-   for i = 1:length(marker_names)
-       if ~strcmp(marker_names{i}, 'spine_m')
-           marker = markers.(marker_names{i});
-           sagittal = compute_sagittal_position(marker);
-           combined_signals = [combined_signals sagittal];
-       end
-   end
-   
-   % Use mean of all markers for robust cycle detection
-   mean_signal = mean(combined_signals, 2);
-   zero_crosses = find(diff(sign(mean_signal)) > 0);
-   
-   starts = zero_crosses(1:end-1);
-   ends = zero_crosses(2:end);
-end
-function [starts, ends] = detect_by_peaks(markers, marker_names, params)
-   combined_signals = [];
-   
-   for i = 1:length(marker_names)
-       if ~strcmp(marker_names{i}, 'spine_m')
-           marker = markers.(marker_names{i});
-           sagittal = compute_sagittal_position(marker);
-           combined_signals = [combined_signals sagittal];
-       end
-   end
-   
-   mean_signal = mean(combined_signals, 2);
-   [~, peak_locs] = findpeaks(mean_signal, 'MinPeakDistance', round(params.min_cycle_length * params.sampling_rate));
-   
-   starts = peak_locs(1:end-1);
-   ends = peak_locs(2:end);
+    % Initialize storage for each marker's crossings
+    marker_crossings = struct();
+    
+    % Process each marker independently
+    for i = 1:length(marker_names)
+        if ~strcmp(marker_names{i}, 'spine_m')
+            marker = markers.(marker_names{i});
+            sagittal = compute_sagittal_position(marker);
+            
+            % Center the signal around its mean to ensure meaningful crossings
+            centered_signal = sagittal - mean(sagittal);
+            
+            % Find zero crossings (positive slope)
+            crossings = find(diff(sign(centered_signal)) > 0);
+            
+            % Store if we have at least one complete cycle
+            if length(crossings) >= 2
+                marker_crossings.(marker_names{i}).starts = crossings(1:end-1);
+                marker_crossings.(marker_names{i}).ends = crossings(2:end);
+            end
+        end
+    end
+    
+    % Return consolidated crossings
+    [starts, ends] = consolidate_marker_cycles(marker_crossings);
 end
 
-function [starts, ends] = detect_by_phase(markers, marker_names, params)
-   combined_signals = [];
-   velocities = [];
-   
-   for i = 1:length(marker_names)
-       if ~strcmp(marker_names{i}, 'spine_m')
-           marker = markers.(marker_names{i});
-           sagittal = compute_sagittal_position(marker);
-           velocity = diff(sagittal) * params.sampling_rate;
-           velocity = [velocity; velocity(end)];
-           
-           combined_signals = [combined_signals sagittal];
-           velocities = [velocities velocity];
-       end
-   end
-   
-   mean_pos = mean(combined_signals, 2);
-   mean_vel = mean(velocities, 2);
-   
-   % Find zero crossings in phase space
-   phase_angle = atan2(mean_vel, mean_pos);
-   crossings = find(diff(phase_angle) < -pi); % Full cycle completion
-   
-   starts = crossings(1:end-1);
-   ends = crossings(2:end);
+function [marker_cycles] = detect_by_phase(markers, marker_names, params)
+    marker_cycles = struct();
+    
+    for i = 1:length(marker_names)
+        if ~strcmp(marker_names{i}, 'spine_m')
+            marker = markers.(marker_names{i});
+            sagittal = compute_sagittal_position(marker);
+            
+            % Compute velocity with improved smoothing
+            velocity = smooth_velocity(sagittal, params.sampling_rate);
+            
+            % Normalize signals preserving zero-crossings
+            norm_pos = sagittal - mean(sagittal);
+            norm_vel = velocity - mean(velocity);
+            
+            % Compute phase angle
+            phase = atan2(norm_vel, norm_pos);
+            
+            % Instead of looking for negative transitions in unwrapped phase,
+            % look for complete rotations in the phase plane
+            transitions = find(abs(diff(phase)) > pi);
+            
+            % Filter transitions to ensure they represent true cycles
+            valid_transitions = filter_transitions(transitions, phase, params);
+            
+            if length(valid_transitions) >= 2
+                marker_cycles.(marker_names{i}).starts = valid_transitions(1:end-1);
+                marker_cycles.(marker_names{i}).ends = valid_transitions(2:end);
+
+
+            end
+        end
+    end
+
+    
+    [starts, ends] = consolidate_marker_cycles(marker_cycles);
 end
+
+function valid = filter_transitions(transitions, phase, params)
+    if isempty(transitions)
+        valid = [];
+        return
+    end
+    
+    % Minimum samples between transitions
+    min_samples = round(params.min_cycle_length * params.sampling_rate);
+    
+    % Find transitions that are sufficiently separated
+    transition_gaps = diff(transitions);
+    valid_gaps = transition_gaps >= min_samples;
+    
+    % Include first transition and those with valid gaps
+    valid = transitions([true; valid_gaps]);
+    
+    % Verify direction of rotation at transitions
+    for i = 1:length(valid)-1
+        segment = phase(valid(i):valid(i+1));
+        if ~is_valid_rotation(segment)
+            valid(i+1) = [];
+        end
+    end
+end
+
+function valid = is_valid_rotation(phase_segment)
+    % Unwrap just this segment
+    unwrapped = unwrap(phase_segment);
+    % Check if total phase change is approximately 2π
+    phase_change = abs(unwrapped(end) - unwrapped(1));
+    valid = abs(phase_change - 2*pi) < pi/2;
+end
+function v_smooth = smooth_velocity(signal, fs)
+    % Compute velocity with Savitzky-Golay filtering
+    window = min(21, length(signal)-1);
+    if mod(window, 2) == 0
+        window = window - 1;
+    end
+    v_smooth = sgolayfilt(gradient(signal) * fs, 3, window);
+end
+
+function [starts, ends] = consolidate_marker_cycles(marker_cycles)
+    % Combine cycles from all markers while preserving individual timing
+    all_starts = [];
+    all_ends = [];
+    
+    marker_names = fieldnames(marker_cycles);
+    for i = 1:length(marker_names)
+        if isfield(marker_cycles.(marker_names{i}), 'starts')
+            all_starts = [all_starts; marker_cycles.(marker_names{i}).starts];
+            all_ends = [all_ends; marker_cycles.(marker_names{i}).ends];
+        end
+    end
+    
+    % Sort and pair corresponding starts/ends
+    [starts, sort_idx] = sort(all_starts);
+    ends = all_ends(sort_idx);
+end
+
+% function [starts, ends] = detect_by_zero_crossing(markers, marker_names, params)
+%    combined_signals = [];
+% 
+%    % Combine signals from all markers
+%    for i = 1:length(marker_names)
+%        if ~strcmp(marker_names{i}, 'spine_m')
+%            marker = markers.(marker_names{i});
+%            sagittal = compute_sagittal_position(marker);
+%            combined_signals = [combined_signals sagittal];
+%        end
+%    end
+% 
+%    % Use mean of all markers for robust cycle detection
+%    mean_signal = mean(combined_signals, 2);
+%    zero_crosses = find(diff(sign(mean_signal)) > 0);
+% 
+%    starts = zero_crosses(1:end-1);
+%    ends = zero_crosses(2:end);
+% end
+
+function [starts, ends] = detect_by_peaks(markers, marker_names, params)
+     all_peaks = [];
+    
+    % Detect peaks for each marker separately
+    for i = 1:length(marker_names)
+        if ~strcmp(marker_names{i}, 'spine_m')
+            marker = markers.(marker_names{i});
+            sagittal = compute_sagittal_position(marker);
+            
+            % Find peaks for this marker
+            [~, marker_peaks] = findpeaks(sagittal, ...
+                'MinPeakDistance', round(params.min_cycle_length * params.sampling_rate));
+            
+            all_peaks = [all_peaks; marker_peaks];
+        end
+    end
+    
+    % Sort all detected peaks chronologically
+    all_peaks = sort(all_peaks);
+    
+    % Remove peaks that are too close together (optional)
+    min_separation = round(params.min_cycle_length * params.sampling_rate / 2);
+    valid_peaks = [true; diff(all_peaks) >= min_separation];
+    all_peaks = all_peaks(valid_peaks);
+    
+    % Create starts and ends
+    starts = all_peaks(1:end-1);
+    ends = all_peaks(2:end);
+end
+% 
+% function [starts, ends] = detect_by_phase(markers, marker_names, params)
+%    combined_signals = [];
+%    velocities = [];
+% 
+%    for i = 1:length(marker_names)
+%        if ~strcmp(marker_names{i}, 'spine_m')
+%            marker = markers.(marker_names{i});
+%            sagittal = compute_sagittal_position(marker);
+%            velocity = diff(sagittal) * params.sampling_rate;
+%            velocity = [velocity; velocity(end)];
+% 
+%            combined_signals = [combined_signals sagittal];
+%            velocities = [velocities velocity];
+%        end
+%    end
+% 
+%    mean_pos = mean(combined_signals, 2);
+%    mean_vel = mean(velocities, 2);
+% 
+%    % Find zero crossings in phase space
+%    phase_angle = atan2(mean_vel, mean_pos);
+%    crossings = find(diff(phase_angle) < -pi); % Full cycle completion
+% 
+%    starts = crossings(1:end-1);
+%    ends = crossings(2:end);
+% end
 
 
 function aligned = align_cycles_3d(cycles, params)
@@ -205,10 +395,10 @@ function [cycles, valid] = extract_valid_cycles(norm_markers, starts, ends, para
    cycles = struct();
    valid = false(length(starts), 1);
    marker_names = fieldnames(norm_markers);
-   
+
    for i = 1:length(starts)
        cycle_length = ends(i) - starts(i);
-       
+
        if is_valid_cycle_length(cycle_length, params)
            valid(i) = true;
            for m = 1:length(marker_names)
@@ -220,6 +410,41 @@ function [cycles, valid] = extract_valid_cycles(norm_markers, starts, ends, para
        end
    end
 end
+% 
+% function [cycles, valid] = extract_valid_cycles(norm_markers, params)
+%     marker_names = fieldnames(norm_markers);
+%     cycles = struct();
+%     cycle_count = 0;
+% 
+%     % Process each marker independently
+%     for m = 1:length(marker_names)
+%         if strcmp(marker_names{m}, 'spine_m')
+%             continue;
+%         end
+% 
+%         % Get marker-specific cycles
+%         marker_data = norm_markers.(marker_names{m});
+%         sagittal = compute_sagittal_position(marker_data);
+%         [~, peak_locs] = findpeaks(sagittal, ...
+%             'MinPeakDistance', round(params.min_cycle_length * params.sampling_rate));
+% 
+%         marker_starts = peak_locs(1:end-1);
+%         marker_ends = peak_locs(2:end);
+% 
+%         % Validate and store cycles for this marker
+%         for i = 1:length(marker_starts)
+%             cycle_length = marker_ends(i) - marker_starts(i);
+% 
+%             if is_valid_cycle_length(cycle_length, params)
+%                 cycle_count = cycle_count + 1;
+%                 cycles(cycle_count).(marker_names{m}) = ...
+%                     marker_data(marker_starts(i):marker_ends(i), :);
+%             end
+%         end
+%     end
+% 
+%     valid = true(cycle_count, 1);  % All cycles are pre-validated
+% end
 
 function valid = is_valid_cycle_length(cycle_length, params)
    min_samples = round(params.min_cycle_length * params.sampling_rate);
@@ -227,9 +452,9 @@ function valid = is_valid_cycle_length(cycle_length, params)
    valid = cycle_length >= min_samples && cycle_length <= max_samples;
 end
 
-function all_cycles = store_valid_cycles(cycles, valid, all_cycles, cycle_count)
+function all_cycles = store_valid_cycles(cycles, all_cycles, cycle_count)
    % Get valid cycles only
-   valid_cycles = cycles(valid);
+   valid_cycles = cycles;
    
    % Initialize all_cycles if empty
    if isempty(fieldnames(all_cycles))
@@ -317,17 +542,23 @@ function plot_3d_cycles(aligned_cycles, params)
    % Calculate means and SEMs for each marker
    for m = 1:length(marker_names)
        % Initialize 3D matrix for each marker (timepoints × dimensions × cycles)
-       all_data = zeros(n_timepoints, 3, n_cycles);
-       % Stack all cycles for this marker
+       % all_data = zeros(n_timepoints, 3, n_cycles);
+       % % Stack all cycles for this marker
+       % for cycle = 1:n_cycles
+       %     this_d = aligned_cycles(cycle).(marker_names{m});
+       %     if isempty(this_d), continue, end
+       %     all_data(:,:,cycle) = aligned_cycles(cycle).(marker_names{m});
+       % end
+       all_data = [];
        for cycle = 1:n_cycles
            this_d = aligned_cycles(cycle).(marker_names{m});
-           if isempty(this_d), continue, end
-           all_data(:,:,cycle) = aligned_cycles(cycle).(marker_names{m});
+           all_data = [all_data;this_d];
+
        end
 
        % Calculate mean and SEM
-       marker_mean = mean(all_data, 3);
-       marker_sem = std(all_data, 0, 3) / sqrt(n_cycles);
+       marker_mean = mean(all_data, 1);
+       marker_sem = std(all_data, 0, 1) / sqrt(size(all_data,1));
 
        % Calculate mean and SEM
        means.(marker_names{m}) = marker_mean;
@@ -339,19 +570,10 @@ function plot_3d_cycles(aligned_cycles, params)
    hold on;
    for m = 1:length(marker_names)
        % Plot mean points
+       subplot(2,2,m)
 
-       scatter(means.(marker_names{m})(:,1), ...
-               means.(marker_names{m})(:,3), ...
-               50, params.marker_colors{m}, 'filled');
-       
-       % % Optional: Add error bars
-       % for i = 1:size(means.(marker_names{m}), 1)
-       %     scatter3([means.(marker_names{m})(i,1) - sems.(marker_names{m})(i,1), ...
-       %           means.(marker_names{m})(i,1) + sems.(marker_names{m})(i,1)], ...
-       %          [means.(marker_names{m})(i,2), means.(marker_names{m})(i,2)], ...
-       %          [means.(marker_names{m})(i,3), means.(marker_names{m})(i,3)], ...
-       %          'Color', params.marker_colors{m}, 'LineWidth', 1);
-       % end
+       plot(means.(marker_names{m}));
+       title(marker_names{m})
    end
    
    xlabel(params.plot_dimensions{1});
