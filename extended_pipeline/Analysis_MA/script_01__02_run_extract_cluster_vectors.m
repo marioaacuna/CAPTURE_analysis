@@ -6,7 +6,7 @@
 % At the same time, the structure output should have the conditions.
 
 %% Parameters
-
+logger('Starting extract cluster vectors script', 'INFO');
 %{
  animal_list = {'326', '327', '328', '330', '332_training', '332', '334', '335', '336'};
  
@@ -17,6 +17,7 @@ clc, clear
 GC = general_configs(); % load general configurations
 
 %% Load Data
+logger('Loading data', 'INFO');
 % Load analysis structure
 load(GC.filename_analysis, 'analysisstruct');
 
@@ -29,7 +30,7 @@ load(GC.filename_ratception, 'ratception_struct');
 
 
 %% Prepare Data
-
+logger('Preparing data', 'INFO');
 % get the animal list and the condition
 animals_and_conditions = unique(animal_condition_identifier, 'stable');
 
@@ -85,6 +86,7 @@ for iid = 1:length(animal_list)
 end
 
 % Loop through the animals
+logger('Looping through animals to extract clusters', 'INFO');
 clusters_struct = struct();
 for animal_idx = 1:length(animal_list)
     animal_ID = animal_list{animal_idx};
@@ -98,9 +100,11 @@ end
 clusters_struct.conditions = conditions;
 
 % Save the structure
+logger('Saving clusters structure', 'INFO');
 save(clusters_struct_file, 'clusters_struct')
 
 disp('DONE')
+logger('Extract cluster vectors script completed', 'INFO');
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Helper functions
@@ -182,4 +186,4 @@ function clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstru
     end
     % Downsample the clusters
     clusters = downsample(clusters, upsamplig_factor);
-end 
+end

@@ -1,4 +1,5 @@
 % 1. Initialization
+logger('Starting walking analysis script', 'INFO');
 % clear;
 close all;
 clc;
@@ -6,12 +7,14 @@ GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
 
 % Load Data
+logger('Loading data', 'INFO');
 load(GC.filename_analysis, 'analysisstruct')
 load(GC.filename_ratception, 'ratception_struct');
 load(GC.filename_predictions, 'animal_condition_identifier');
 input_params.repfactor = GC.repfactor;
 
 % Preprocess data
+logger('Preprocessing data', 'INFO');
 markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 10);
 markers_not_aligned_ds = load_aligned_markers(ratception_struct.markers_preproc, input_params.repfactor, 15);
 % Extract conditions
@@ -20,6 +23,7 @@ conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_conditions = unique(conditions);
 
 %% 2.1 calculate walking bouts based on 2D positions (x,y)
+logger('Calculating walking bouts', 'INFO');
 % Basic usage
 % walking_bouts = detectWalkingFrom2D(markers_not_aligned_ds.SpineM);
 
@@ -42,6 +46,7 @@ free_Snout = markers_not_aligned_ds.Snout;
 [walking_bouts, metrics] = detectWalkingFrom2D(free_SpineM,free_Snout, params);
 
 %% 3. Analysis of angles at walking in egocentric reference
+logger('Analyzing angles at walking', 'INFO');
 markers = markers_aligned_ds;
 
 % Calculate angles and perform analysis
@@ -50,7 +55,7 @@ analyze_angles(markers, walking_bouts, conditions, unique_conditions, frame_iden
 disp('done')
 
 % Output a small video with a walking example
-
+logger('Creating walking example video', 'INFO');
 s = struct();
 s.markers_aligned_preproc = markers_aligned_ds;
 s.markernames = ratception_struct.markernames;
@@ -65,6 +70,7 @@ frames_to_plot = [bout_starts(1):bout_ends(1),bout_starts(3): bout_ends(3)];
 g = animate_markers_aligned_fullmovie_demo(s,frames_to_plot, h , '');
 
 % Create GIF
+logger('Creating GIF', 'INFO');
 gif_filename = 'walking_analysis.gif';
 h = figure;
 for frame = 1:length(frames_to_plot)
@@ -103,9 +109,11 @@ end
 % close(v);
 
 %% 4. Kinematic analysis of gait cycles
+logger('Performing kinematic analysis of gait cycles', 'INFO');
 cycles_all = analyze_gait_cycles_3d(markers, walking_bouts, params);
 
 %% 4.1 Kinematics of gait cycles per condition
+logger('Analyzing kinematics of gait cycles per condition', 'INFO');
 CYCLES = struct();
 % Separate data by conditions
 for c = 1:length(unique_conditions)
@@ -127,6 +135,7 @@ end
 disp('done')
 
 %% 5. Plotting cycles per marker for each condition
+logger('Plotting cycles per marker for each condition', 'INFO');
 marker_names = params.markers_to_study;
 n_markers = length(marker_names);
 n_conditions = length(unique_conditions);
@@ -176,6 +185,7 @@ sgtitle('Mean Gait Cycle per Marker and Condition');
 hold off;
 
 %% 6. Statistical Analysis and Plotting for Each Marker
+logger('Performing statistical analysis and plotting for each marker', 'INFO');
 toggle_toolbox('spm1d', 'on')
 for m = 1:n_markers
     marker_name = marker_names{m};
@@ -247,6 +257,7 @@ for m = 1:n_markers
 end
 toggle_toolbox('spm1d', 'off')
 
+logger('Walking analysis script completed', 'INFO');
 %% --- END OF SCRIPT ---
 
 

@@ -1,6 +1,7 @@
 % analysis of movement
 
 % Initialization
+logger('Starting movement analysis script', 'INFO');
 clear;
 close all;
 clc;
@@ -8,6 +9,7 @@ GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
 
 % Load Data
+logger('Loading data', 'INFO');
 
 % Load ratception structure
 load(GC.filename_ratception, 'ratception_struct');
@@ -20,17 +22,21 @@ input_params.repfactor = GC.repfactor;
 
 
 % Preprocess data
+logger('Preprocessing data', 'INFO');
 markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 15);
 
 % run movement pattern function
+logger('Running movement pattern function', 'INFO');
 m_f = analyze_movement_patterns(markers_aligned_ds);
 
 % Extract conditions
+logger('Extracting conditions', 'INFO');
 frame_identifiers = animal_condition_identifier;
 conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_conditions = unique(conditions);
 
 % Run statistics across experimental conditions
+logger('Running statistics across experimental conditions', 'INFO');
 fields = fieldnames(m_f);
 colors = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], [0.9290 0.6940 0.1250], ...
           [0.4940 0.1840 0.5560], [0.4660 0.6740 0.1880]};
@@ -117,6 +123,7 @@ for f = 1%:length(fields)
 end
 
 disp('done')
+logger('Movement analysis script completed', 'INFO');
 
     % Negative values indicate guarding (affected side moves less)
     % Positive values indicate compensation (affected side moves more)

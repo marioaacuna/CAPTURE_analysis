@@ -4,14 +4,17 @@ close all;
 clc;
 GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
+logger('Starting left leg movement analysis script', 'INFO');
 
 % Load Data
+logger('Loading data', 'INFO');
 load(GC.filename_analysis, 'analysisstruct')
 load(GC.filename_ratception, 'ratception_struct');
 load(GC.filename_predictions, 'animal_condition_identifier');
 input_params.repfactor = GC.repfactor;
 
 % Preprocess data
+logger('Preprocessing data', 'INFO');
 markers_aligned_ds = load_aligned_markers(ratception_struct.markers_aligned_preproc, input_params.repfactor, 30);
 
 % Extract conditions
@@ -20,6 +23,7 @@ conditions = cellfun(@(x) x(end), frame_identifiers, 'UniformOutput', false);
 unique_conditions = unique(conditions);
 
 %% Analyse angles.
+logger('Analyzing angles', 'INFO');
 % Get marker data
 markers = markers_aligned_ds;
 
@@ -40,6 +44,7 @@ ankle_vel = calculate_velocity(ankle, fps);
 paw_vel = calculate_velocity(paw, fps);
 
 % Separate data by conditions
+logger('Separating data by conditions', 'INFO');
 fields = {'leg_angles', 'knee_vel', 'ankle_vel', 'paw_vel'};
 data_struct = struct('leg_angles', leg_angles, ...
                      'knee_vel', knee_vel, 'ankle_vel', ankle_vel, 'paw_vel', paw_vel);
@@ -198,4 +203,5 @@ for f = 1:length(fields)
 end
 
 disp('done')
+logger('Left leg movement analysis script completed', 'INFO');
 

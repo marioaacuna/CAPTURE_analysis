@@ -24,6 +24,7 @@
 %   - Various figures, tables, and statistical results saved to the specified output directory
 
 %% Initialization
+logger('Starting behavioral cluster analysis script', 'INFO');
 clear;
 close all;
 clc;
@@ -37,6 +38,7 @@ rootpath = GC.preprocessing_rootpath;
 % ratception_filename = fullfile(rootpath, 'ratception_prediction.mat');
 
 %% Load Data
+logger('Loading data', 'INFO');
 % Load analysis structure
 load(GC.filename_analysis, 'analysisstruct');
 
@@ -47,6 +49,7 @@ load(GC.filename_predictions, 'predictions', 'animal_condition_identifier');
 load(GC.filename_ratception, 'ratception_struct');
 
 %% 1. Cluster Composition Analysis
+logger('Performing cluster composition analysis', 'INFO');
 disp('Performing Cluster Composition Analysis...');
 %% Prepare Data
 % Upsample animal_condition_identifier
@@ -175,6 +178,7 @@ box off;
 saveas(fig_prop, fullfile(GC.figure_folder, 'cluster_proportions_comparison_all_conditions.fig'));
 
 %% 2. Visualization of significant clusters
+logger('Visualizing significant clusters', 'INFO');
 to_take = cluster_ids(p_values_all < 0.05);%) & mean_diff > 0); % TODO: fix: mean_diff does not exist
 fig_predominant = figure('pos', [10,300,1500,1900]);
 n_rows = ceil(sqrt(numel(to_take)));
@@ -190,6 +194,7 @@ for ic = 1:numel(to_take)
 end
 
 %% Calculate predominant frames
+logger('Calculating predominant frames', 'INFO');
 % Initialize storage for cluster density per condition
 cluster_density = zeros(length(unique_clusters), num_conditions);
 
@@ -238,7 +243,7 @@ for cond = 1:num_conditions
     predominant_clusters{cond} = find(clusterProportions(:, cond) >= threshold);
     
     % Create figure for predominant clusters of each condition
-    if ~isempty(predominant_clusters{cond})
+    if (~isempty(predominant_clusters{cond}))
         fig_predominant = figure('pos', [10,10,2056,1350], 'color','w');
         to_take = predominant_clusters{cond};
         n_rows = ceil(sqrt(numel(to_take)));
@@ -274,6 +279,7 @@ save(fullfile(rootpath, 'cluster_analysis_results.mat'), 'results');
 
 
 %% 2.1 feature analyses
+logger('Performing feature analyses', 'INFO');
 %% Cluster Distribution Analysis Across Conditions
 disp('Analyzing cluster distributions across conditions...');
 
@@ -349,6 +355,7 @@ function d = kldiv(p, q)
 end
 
 %% 2.2 Analysis Cluster sequences (Transition matrix, dwell times, etc)
+logger('Performing transition matrix analysis', 'INFO');
 disp('Performing Transition Matrix Analysis...');
 
 unique_animals = unique(animal_ids);
@@ -483,6 +490,7 @@ end
 
 % --- ANALYSIS ACROSS CONDITIONS ---
 %% Visualizations
+logger('Creating visualizations', 'INFO');
 % Analysis of dwell time and transitions per minute
 % Visualize avg_behavior_predictability
 figure('Position', [100 100 800 600], 'Color', 'w');
@@ -611,6 +619,7 @@ end
 
 
 %% 2. Temporal Analysis
+logger('Performing temporal analysis', 'INFO');
 disp('Performing Temporal Analysis...');
 % TODO: Implement temporal analysis
 % - Analyze temporal distribution of cluster occurrences
@@ -618,6 +627,7 @@ disp('Performing Temporal Analysis...');
 % - Perform Markov chain analysis on behavioral sequences
 
 %% 3. Pose Analysis
+logger('Performing pose analysis', 'INFO');
 disp('Performing Pose Analysis...');
 % TODO: Implement pose analysis
 % - Compute mean pose and variance for each cluster and condition
@@ -625,6 +635,7 @@ disp('Performing Pose Analysis...');
 % - Visualize pose differences using vector fields or heatmaps
 
 %% 4. Kinematic Feature Analysis
+logger('Performing kinematic feature analysis', 'INFO');
 disp('Performing Kinematic Feature Analysis...');
 % TODO: Implement kinematic feature analysis
 % - Extract kinematic features (joint angles, velocities) for each cluster
@@ -632,12 +643,14 @@ disp('Performing Kinematic Feature Analysis...');
 % - Perform discriminant analysis to identify distinguishing features
 
 %% 5. Cluster Stability Analysis
+logger('Performing cluster stability analysis', 'INFO');
 disp('Performing Cluster Stability Analysis...');
 % TODO: Implement cluster stability analysis
 % - Assess stability of clusters across different animals within each condition
 % - Use measures like Adjusted Rand Index or Normalized Mutual Information
 
 %% 6. Dimensionality Reduction and Visualization
+logger('Performing dimensionality reduction and visualization', 'INFO');
 disp('Performing Dimensionality Reduction and Visualization...');
 % TODO: Implement dimensionality reduction and visualization
 % - Apply t-SNE or UMAP to visualize high-dimensional pose data
@@ -645,31 +658,37 @@ disp('Performing Dimensionality Reduction and Visualization...');
 % - Analyze distribution and overlap of conditions in reduced space
 
 %% 7. Time Series Analysis
+logger('Performing time series analysis', 'INFO');
 disp('Performing Time Series Analysis...');
 % TODO: Implement time series analysis
 % - Perform autocorrelation and cross-correlation analysis on cluster sequences
 % - Apply change point detection algorithms to identify behavioral shifts
 
 %% 8. Machine Learning Classification
+logger('Performing machine learning classification', 'INFO');
 disp('Performing Machine Learning Classification...');
 % TODO: Implement machine learning classification
 % - Train classifier to distinguish between conditions based on cluster occurrences
 % - Analyze feature importance to identify key discriminative behaviors
 
 %% 9. Network Analysis
+logger('Performing network analysis', 'INFO');
 disp('Performing Network Analysis...');
 % TODO: Implement network analysis
 % - Construct behavioral networks (nodes: clusters, edges: transitions)
 % - Compare network properties between conditions
 
 %% 10. Entropy and Complexity Measures
+logger('Calculating entropy and complexity measures', 'INFO');
 disp('Calculating Entropy and Complexity Measures...');
 % TODO: Implement entropy and complexity analysis
 % - Calculate entropy of cluster distributions for each condition
 % - Apply complexity measures to cluster sequences
 
 %% Save Results
+logger('Saving results', 'INFO');
 disp('Saving Results...');
 % TODO: Save all results, figures, and tables to output directory
 
+logger('Behavioral cluster analysis script completed', 'INFO');
 disp('Analysis Complete!');
