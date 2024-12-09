@@ -67,7 +67,7 @@ bout_starts = find(diff([0; walking_bouts]) == 1);
 bout_ends = find(diff([walking_bouts; 0]) == -1);
 
 frames_to_plot = [bout_starts(1):bout_ends(1),bout_starts(3): bout_ends(3)];
-g = animate_markers_aligned_fullmovie_demo(s,frames_to_plot, h , '');
+% g = animate_markers_aligned_fullmovie_demo(s,frames_to_plot, h , '');
 
 % Create GIF
 logger('Creating GIF', 'INFO');
