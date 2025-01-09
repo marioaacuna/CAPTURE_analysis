@@ -44,7 +44,7 @@ params.markers_to_study = {'WristL', 'WristR', 'KneeL', 'KneeR','AnkleL', 'Ankle
 [pain_frames, metrics]  = detectPainPhenotypes(markers_not_aligned_ds,markers_aligned_ds, params);
 % TEst
 % pain_frames = metrics.paw_licking_detected;
-% Output a small video with a walking example
+%% Output a small video with a walking example
 logger('Creating walking example video', 'INFO');
 s = struct();
 s.markers_aligned_preproc = markers_aligned_ds;
