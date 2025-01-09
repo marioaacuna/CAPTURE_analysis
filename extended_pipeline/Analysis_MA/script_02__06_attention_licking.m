@@ -105,7 +105,7 @@ logger('Performing ANOVA and posthoc comparisons', 'INFO');
 
 c = multcompare(stats);
 
-kruskalwallis
+
 % Extract significant comparisons
 significant_comparisons = c(c(:,6) < 0.05, :);
 
