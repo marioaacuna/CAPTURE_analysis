@@ -15,12 +15,21 @@ function GC = general_configs()
     % Temp root folder for outputs
     if ispc
         temp_root = 'D:/CAPTURE';
-        project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\extended_pipeline';
-    else    
-        project_path =  fullfile('~/Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics/extended_pipeline');
-        temp_root = fullfile('~/Documents/Temp_analysis/CAPTURE/extended_pipeline');
+        project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\';
+        drive_V = 'V:\';
+    elseif ismac
+        mac_name = 'marioacuna';
+        project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
+        if ~exist(project_path, 'dir')
+            mac_name = 'mario';
+            project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
+        end
+        temp_root = fullfile('/Users',mac_name,'Documents/Temp_analysis/CAPTURE');
+    elseif isunix
+        project_path = '/home/mario/Documents/Spontaneous_pain_kinematics';
+        temp_root = '/home/mario/Documents/Temp_analysis/CAPTURE';
+        drive_V = 'mnt/V/';
     end
-
     if ~exist(temp_root, 'dir')
         mkdir(temp_root)
     end
@@ -48,6 +57,7 @@ function GC = general_configs()
     GC.preprocessing_rootpath   = preprocessing_rootpath;
     GC.postprocessing_rootpath  = postprocessing_rootpath;
     GC.figure_folder            = figure_folder;
+    GC.traces_folder            = fullfile(drive_V, 'Ca_imaging_pain', '4_fluorescence_traces');
 
     % Python
     GC.python = struct();

@@ -7,8 +7,8 @@ clear, close all, clc
 global GC
 % inputs
 
-session_to_take = 2; % this session contains the Sal or PFA data
-ROI_traces_path = 'V:\Ca_imaging_pain\4_fluorescence_traces'; % for now we leave them blank, fix later
+session_to_take = 2; % this session contains the H or N data
+ROI_traces_path = GC.traces_folder  % for now we leave them blank, fix later
 clusters_path = '';
 suffix = '_raw_deltaF_over_F.mat';
 
