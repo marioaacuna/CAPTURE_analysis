@@ -15,11 +15,11 @@ function GC = general_configs()
     % Temp root folder for outputs
     if ispc
         temp_root = 'D:/CAPTURE';
-        project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\';
+        project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\extended_pipeline';
         drive_V = 'V:\';
     elseif ismac
         mac_name = 'marioacuna';
-        project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
+        project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics/extended_pipeline');
         if ~exist(project_path, 'dir')
             mac_name = 'mario';
             project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');

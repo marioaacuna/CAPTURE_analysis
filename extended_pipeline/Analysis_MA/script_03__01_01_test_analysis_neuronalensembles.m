@@ -1,3 +1,8 @@
+function script_03__01_01_test_analysis_neuronalensembles(data_H, data_N, names)
+
+% Unpack
+cond_1_name = names{1};
+cond_2_name = names{2};
 % Initialize containers for per-cluster analysis
 H_animals = fieldnames(data_H);
 N_animals = fieldnames(data_N);
@@ -75,10 +80,10 @@ end
 
 % Analyze example animals from each condition
 analyze_cluster_ensembles(data_H, H_animals{1});
-title('Sham Condition')
+title([cond_1_name,' Condition'])
 
 analyze_cluster_ensembles(data_N, N_animals{1});
-title('Neuropathic Condition')
+title([cond_2_name,' Condition'])
 
 %% Concatenated analysis of PCA data
 % Initialize group_analysis structure
@@ -104,6 +109,7 @@ H_components = [];
 H_weights = [];
 H_clusters = [];
 H_pca_scores = [];
+H_pca_10 = [];
 
 % For Sham animals
 for h = 1:length(H_animals)
@@ -129,6 +135,8 @@ for h = 1:length(H_animals)
             H_components = [H_components; animal_data(cluster).principal_components];
             H_weights = [H_weights; animal_data(cluster).neural_weights];
             H_pca_scores = [H_pca_scores; animal_data(cluster).pca_score];
+            pca_10 = pca(animal_data(cluster).traces, 'NumComponents',20);
+            H_pca_10 = [H_pca_10;pca_10];
             
         else
             fprintf('Cluster %d: No activity\n', cluster);
@@ -143,6 +151,7 @@ N_components = [];
 N_weights = [];
 N_clusters = [];
 N_pca_scores = [];
+N_pca_10 = [];
 
 for n = 1:length(N_animals)
     animal_ID = N_animals{n};
@@ -158,6 +167,8 @@ for n = 1:length(N_animals)
             N_components = [N_components; animal_data(cluster).principal_components];
             N_weights = [N_weights; animal_data(cluster).neural_weights];
             N_pca_scores = [N_pca_scores; animal_data(cluster).pca_score];
+            pca_10 = pca(animal_data(cluster).traces, 'NumComponents',20);
+            N_pca_10 = [N_pca_10;pca_10];
         end
     end
     N_clusters = [N_clusters; data_N.(animal_ID).cluster_vector'];
@@ -207,7 +218,7 @@ errorbar([1 2], [mean_H mean_N], [sem_H sem_N], 'k', 'LineStyle', 'none', 'LineW
 
 % Customize plot
 set(gca, 'XTick', 1:2)
-set(gca, 'XTickLabel', {'Sham', 'Neuropathic'})
+set(gca, 'XTickLabel', {cond_1_name, cond_2_name})
 title('Neural Weights by Condition')
 ylabel('Mean Weight Value ± SEM')
 
@@ -218,14 +229,14 @@ text(1.5, max([mean_H+sem_H, mean_N+sem_N])*1.1, sprintf('p = %.3f', p))
 %% 2. Component Space Comparison
 subplot(2,2,2)
 % Create 3D scatter plot
-scatter3(group_analysis.H.pca_scores(:,1), ...
-        group_analysis.H.pca_scores(:,2), ...
-        group_analysis.H.pca_scores(:,3), ...
+scatter3(group_analysis.H.components(:,1), ...
+        group_analysis.H.components(:,2), ...
+        group_analysis.H.components(:,3), ...
         20, 'b.', 'DisplayName', 'Sham')
 hold on
-scatter3(group_analysis.N.pca_scores(:,1), ...
-        group_analysis.N.pca_scores(:,2), ...
-        group_analysis.N.pca_scores(:,3), ...
+scatter3(group_analysis.N.components(:,1), ...
+        group_analysis.N.components(:,2), ...
+        group_analysis.N.components(:,3), ...
         20, 'r.', 'DisplayName', 'Neuropathic')
 
 xlabel('PC1')
@@ -250,8 +261,8 @@ end
 imagesc(corr_matrix)
 colorbar
 title('Component Correlation Between Conditions')
-xlabel('Neuropathic PCs')
-ylabel('Sham PCs')
+xlabel([cond_2_name,' PCs'])
+ylabel([cond_1_name,' PCs'])
 colormap('jet')
 axis square
 
@@ -278,3 +289,15 @@ fprintf('Number of samples:\n')
 fprintf('  Sham: %d\n', size(group_analysis.H.weights,1))
 fprintf('  Neuropathic: %d\n', size(group_analysis.N.weights,1))
 fprintf('\nWeight comparison p-value: %.3f\n', p)
+
+%% TSNE
+to_tnse_all = [H_pca_10;N_pca_10];
+tsne_all = pca(to_tnse_all');
+
+figure,
+gscatter(tsne_all(:,1), tsne_all(:,2), [ones(size(H_pca_10,1),1); 2*ones(size(N_pca_10,1),1)])
+
+
+
+
+end

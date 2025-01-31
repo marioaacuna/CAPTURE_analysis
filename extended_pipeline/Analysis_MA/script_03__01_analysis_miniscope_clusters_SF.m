@@ -50,13 +50,18 @@ for animal = 1:length(animals_of_interest)
         continue
     end
 
+
+    % Animal: ID_1386 has only 2 sessions, so select 1 and 2
     % Select appropriate session based on condition
     if strcmp(animal_condition, 'S')
         session_to_use = 2;
     else % F condition
         session_to_use = 3;
     end
-
+    
+    if startsWith(animal_ID, 'ID_1386')
+        session_to_use = session_to_use - 1;
+    end
     traces = data.dFF(:,session_to_use);
     traces = cell2mat(traces);
 
@@ -91,4 +96,12 @@ for animal = 1:length(animals_of_interest)
     end
 end
 
-% ... Rest of the code remains the same but replace H/N with S/F ...
+%% 
+% Call the function to analyze and plot the calcium metrics comparison
+analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'max_amplitude', 'S_v_F');
+analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'peaks', 'S_v_F');
+analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'freqs', 'S_v_F');
+
+%% analysis neuronal ensembles pca
+names = {'Saline', 'Formalin'};
+script_03__01_01_test_analysis_neuronalensembles(data_S, data_F, names)
