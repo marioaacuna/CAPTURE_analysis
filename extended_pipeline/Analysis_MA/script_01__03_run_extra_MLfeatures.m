@@ -17,6 +17,14 @@ load(GC.filename_analysis, 'analysisstruct');
 % % Load predictions
 % load(GC.filename_predictions, 'predictions', 'animal_condition_identifier');
 
+answer = questdlg('Create new ML extra features or Overwrite existing? - you need a lot of RAM Y/N [Y]', ...
+    'Overwrite Confirmation', ...
+    'Yes', 'No', 'No');  % 'No' is default button
+if strcmp(answer, 'Yes')
+    overwriteML = true;
+else
+    overwriteML = false;
+end
 
 % Load ratception structure
 load(GC.filename_ratception, 'ratception_struct');
@@ -32,7 +40,11 @@ savefilename =fullfile(temp_dir,'myMLfeatures.mat');
 directory_here = temp_dir;
 overwrite_coefficient=0;
 
-MLmatobj_extra = create_extra_behavioral_features(mocapstruct,'concate_mice',savefilename,overwrite_coefficient,directory_here);
+if overwriteML
+    MLmatobj_extra = create_extra_behavioral_features(mocapstruct,'concate_mice',savefilename,overwrite_coefficient,directory_here);
+else
+    MLmatobj_extra =matfile(savefilename);
+end
 
 %% load extra features
 % analysisparams.tsnegranularity = 50; 
