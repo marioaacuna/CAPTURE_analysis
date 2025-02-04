@@ -349,7 +349,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
 
     %% save the ML file, clear the features
     if (~overwrite_coeff)
-        save(savefilename,'-struct','ML_features','-append','-v7.3');
+        save(savefilename,'-struct','ML_features','-v7.3');
 
     end
     ML_features = rmfield(ML_features,fieldnames(ML_features));
@@ -579,10 +579,6 @@ if numel(framelist_true)>10 %need at least 1 s of data
         end
     end
     ML_features = rmfield(ML_features,fieldnames(ML_features));
-
-
-
-    keyboard
 
     %% get joint angle features
     %saggital/cross section (ie side view)

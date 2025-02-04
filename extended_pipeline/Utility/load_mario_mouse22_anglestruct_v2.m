@@ -95,7 +95,7 @@ anglestruct.planar_trios{8}.name1 = 'shoulderr_yaw';
 anglestruct.planar_trios{8}.name2 = 'shoulderr_pitch';
 anglestruct.planar_trios{8}.namesuse = [1 2];
 
-% Elbow angles (revised as suggested)
+% Elbow angles (revised)
 anglestruct.planar_trios{9}.plane = {{'ShoulderL', 'ElbowL'}, {'ShoulderR', 'ShoulderL'}};
 anglestruct.planar_trios{9}.vector = {'ElbowL', 'WristL'};
 anglestruct.planar_trios{9}.name1 = 'elbowl_pitch';
