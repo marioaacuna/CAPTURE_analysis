@@ -35,7 +35,7 @@ clear ratception_struct
 mocapstruct.modular_cluster_properties.clipped_index{8} = 1:size(mocapstruct.aligned_mean_position,1 );
 
 % Set inputs
-temp_dir = 'D:\CAPTURE\_temp\250130_extra_features';
+temp_dir = 'H:\Mario\DANNCE\CAPTURE_results\250131\extraFeatures';
 savefilename =fullfile(temp_dir,'myMLfeatures.mat');
 directory_here = temp_dir;
 overwrite_coefficient=0;
