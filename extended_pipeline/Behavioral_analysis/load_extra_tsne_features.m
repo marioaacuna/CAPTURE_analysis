@@ -10,10 +10,24 @@ tsne_features = {'ja_dyadic_spectrograms','appearance_features_agg_score_whitene
     'hunch_ratio',... % good
     'lateral_shift', ... % good
     'paw_clustering', ... % good
-    
-    };
 
-% all
+    };
+num_feat = [10,6,10,15,15];
+
+% % only predifined:
+% tsne_features = {
+%     'guard_left_paw',... % check
+%     'lick_bite_left',... % good
+%     'weight_asymmetry',... % good
+%     'hunch_ratio',... % good
+%     'lateral_shift', ... % good
+%     'paw_clustering', ... % good
+% 
+%     };
+% num_feat = ones(length(tsne_features),1);
+% 
+
+% % all
 % tsne_features = {'ja_dyadic_spectrograms','appearance_features_agg_score_whitened','pose_score',...
 %     'spectrogram_pcs_wl_head_angle','spectrogram_pcs_wl_trunk_angle',...
 %     'absolute_velocity_trunk_abs_100','absolute_std_velocity_trunk_abs_100',...
@@ -23,7 +37,7 @@ tsne_features = {'ja_dyadic_spectrograms','appearance_features_agg_score_whitene
 %     'rel_velocity_hipR_abs_300','rel_velocity_hipL_abs_300','rel_std_velocity_hipR_abs_300','rel_std_velocity_hipL_abs_300',...
 %     'rel_velocity_head_abs_300','rel_std_velocity_head_abs_300','rel_velocity_trunk_abs_300','rel_std_velocity_trunk_abs_300',...
 %     'rel_velocity_trunk_z_300','absolute_velocity_trunk_abs_300','absolute_std_velocity_trunk_abs_300','rel_velocity_head_z_100','rel_std_velocity_head_z_100',...    
-%     'guard_left_paw',... % check
+%     'guard_left_paw',... % good
 %     'lick_bite_left',... % good
 %     'weight_asymmetry',... % good
 %     'hunch_ratio',... % good
@@ -31,10 +45,8 @@ tsne_features = {'ja_dyadic_spectrograms','appearance_features_agg_score_whitene
 %     'paw_clustering', ... % good
 % 
 %     };
-
-
-
-num_feat = [10,6,10,15,15];
+% 
+% num_feat = [10,6,10,15,15];
 
 %% get tsne features
 tsnefeatname = cell(0,1);

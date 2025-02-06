@@ -267,7 +267,9 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
     MLmatobj_extra =matfile(savefilename);
     jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
     
+    
     % 2. Do TSNE
+    rng default % For reproducibility
     zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200);
 
     % OLD (only few features)-> zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
@@ -282,6 +284,8 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
     title({['Granu: ',num2str(analysisparams.tsnegranularity)], ['Perp: ', num2str(perplexity)]})
     set(gcf,'Position',([100 100 1100 1100]))
     set(gcf, 'color', 'w')
+    analysisstruct.extra_jt_features = jt_features_extra;
+
 else
     disp(' Loading TSNE zvals')
     load(zvals_filename)
