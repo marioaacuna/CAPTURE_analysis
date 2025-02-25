@@ -31,13 +31,20 @@ for seq_ic = 1:numel(seq_cls)
 end
 
 %%
+% in case some things are not loaded
+
+filename_predictions = GC.filename_predictions;
+    load(filename_predictions)
+long_animal_frames_identifier = repelem(animal_condition_identifier,3);
+animal_list_used_after_analysis =  long_animal_frames_identifier(analysisstruct.frames_with_good_tracking{1});
+
 %%
 clc
  try
 close(figure_cl_to_take_amim, figure_traces)
 
  end
- seq_cls = 127; % 171, 170, 174
+ seq_cls = 289; % 171, 170, 174, 195
 % CL = cell(length(seq_c_idx),1);
 trace = analysisstruct.annot_reordered{end}==seq_cls;
 figure_traces= figure('pos', [100,50, 1000,500]); hold on
