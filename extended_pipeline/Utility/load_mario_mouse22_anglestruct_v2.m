@@ -5,17 +5,23 @@ function anglestruct = load_mario_mouse22_anglestruct_v2()
 anglestruct.saggital_names = {'head_sagg', 'neck_sagg', 'spine_sagg', 'tail_sagg'};
 anglestruct.saggital_pairs = {[2,3], [3,4], [4,5], [5,22]};
 
+% % Transverse angles (overhead view, x-y plane)
+% anglestruct.transverse_names = {'head_trans', 'neck_trans', 'spine_trans', 'KneeL_trans', 'KneeR_trans', 'shoulderL_trans', 'shoulderR_trans'};
+% anglestruct.transverse_pairs = {[2,3], [3,4], [4,5], [5,6], [5,7], [4,8], [4,9]};
+
 % Transverse angles (overhead view, x-y plane)
 anglestruct.transverse_names = {'head_trans', 'neck_trans', 'spine_trans', 'KneeL_trans', 'KneeR_trans', 'shoulderL_trans', 'shoulderR_trans'};
 anglestruct.transverse_pairs = {[2,3], [3,4], [4,5], [5,6], [5,7], [4,8], [4,9]};
 
 % Coronal angles (front view, x-z plane)
 anglestruct.coronal_names = {'head_coronal', 'KneeL_coronal', 'KneeR_coronal', 'shoulderL_coronal', 'shoulderR_coronal'};
-anglestruct.coronal_pairs = {[3,4], [5,18], [5,19], [4,8], [4,9]};
+% anglestruct.coronal_pairs = {[3,4], [5,18], [5,19], [4,8], [4,9]};
+anglestruct.coronal_pairs = {[2,3], [6,18], [7,19], [4,8], [4,9]};
 
 % % Coronal angles with elbow
 anglestruct.coronal_names = {'head_coronal', 'KneeL_coronal', 'KneeR_coronal', 'shoulderL_coronal', 'shoulderR_coronal', 'elbowL_coronal', 'elbowR_coronal'};
-anglestruct.coronal_pairs = {[3,4], [5,18], [5,19], [4,8], [4,9], [10,12], [11,13]};
+% anglestruct.coronal_pairs = {[3,4], [5,18], [5,19], [4,8], [4,9], [10,12], [11,13]};
+anglestruct.coronal_pairs = {[2,3], [6,18], [7,19], [4,8], [4,9], [10,12], [11,13]};
 
 %% Segment pairs for all angles
 anglestruct.segment_pairs = {
@@ -95,7 +101,7 @@ anglestruct.planar_trios{8}.name1 = 'shoulderr_yaw';
 anglestruct.planar_trios{8}.name2 = 'shoulderr_pitch';
 anglestruct.planar_trios{8}.namesuse = [1 2];
 
-% Elbow angles (revised as suggested)
+% Elbow angles (revised)
 anglestruct.planar_trios{9}.plane = {{'ShoulderL', 'ElbowL'}, {'ShoulderR', 'ShoulderL'}};
 anglestruct.planar_trios{9}.vector = {'ElbowL', 'WristL'};
 anglestruct.planar_trios{9}.name1 = 'elbowl_pitch';

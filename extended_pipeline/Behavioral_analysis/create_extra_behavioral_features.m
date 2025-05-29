@@ -154,34 +154,141 @@ if numel(framelist_true)>10 %need at least 1 s of data
     clear dyadic_spectrograms_score dyadic_spectrograms_reshaped  dyadic_spectrograms
 
 
-    %% hand designed pose features
-    %high rear
-    ML_features.high_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,3);
-    ML_features.very_high_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,3);
-    % licking left paw
-    ML_features.lick_left_paw = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3) + mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3);
-    % extenssion left paw
-    ML_features.ext_left_paw = abs(mocapstruct.markers_aligned_preproc.KneeL(framelist_true,3))+ abs(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3));
-    % guarding left paw
-    ML_features.guard_left_paw = abs(mocapstruct.markers_aligned_preproc.KneeL(framelist_true,3))-abs(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3));
+    % %% hand designed pose features
+    % %high rear
+    % ML_features.high_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,3);
+    % ML_features.very_high_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,3);
+    % % licking left paw
+    % ML_features.lick_left_paw = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3) + mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3);
+    % % extenssion left paw
+    % ML_features.ext_left_paw = abs(mocapstruct.markers_aligned_preproc.KneeL(framelist_true,3))+ abs(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3));
+    % % guarding left paw
+    % ML_features.guard_left_paw = abs(mocapstruct.markers_aligned_preproc.KneeL(framelist_true,3))-abs(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3));
+    % 
+    % 
+    % 
+    % %low rear -- shortens stance more and more
+    % ML_features.low_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.SpineF(framelist_true,3);
+    % 
+    % %l/r groom
+    % ML_features.RGroom = mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1)-mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1);
+    % ML_features.LGroom =mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1)-mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1);
+    %% Base Features (improved)
+    % Normalized rearing height (accounts for body length)
+    body_length = mean(vectornorm(mocapstruct.markers_aligned_preproc.SpineF, mocapstruct.markers_aligned_preproc.Tail_base_, 2));
+    ML_features.high_rear = (mocapstruct.markers_aligned_preproc.Snout(framelist_true,3) - ...
+                            mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,3)) / body_length;
+    
+    % Dynamic paw elevation (better guarding metric)
+    ML_features.guard_left_paw = vectornorm(...
+        mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.SpineM(framelist_true,:), 2);  % Distance paw to mid-spine
+    
+    % Limb extension angle (more biomechanically meaningful)
+    vec_knee_paw = mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:) - ...
+                  mocapstruct.markers_aligned_preproc.KneeL(framelist_true,:);
+    vec_hip_knee = mocapstruct.markers_aligned_preproc.KneeL(framelist_true,:) - ...
+                  mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,:);
+    ML_features.ext_left_paw = acosd(dot(vec_knee_paw, vec_hip_knee, 2)./...
+        (vecnorm(vec_knee_paw,2,2).*vecnorm(vec_hip_knee,2,2)));  % Knee joint angle
+    
+    %% Pain-Specific Features
+    % 1. Licking/Biting Detection (Formalin)
+    ML_features.lick_bite_left = vectornorm(...
+        mocapstruct.markers_aligned_preproc.Snout(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), 2);  % Direct snout-paw distance
+    
+    % 2. Weight-Bearing Asymmetry (SNI)
+    ML_features.weight_asymmetry = abs(...
+        mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3) - ...
+        mocapstruct.markers_aligned_preproc.HindpawR(framelist_true,3));  % Vertical load difference
+    
+    % 3. Protective Hunched Posture 
+    spine_curvature = vectornorm(...
+        mocapstruct.markers_aligned_preproc.SpineF(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,:), 2);
+    ML_features.hunch_ratio = spine_curvature / body_length;  % Lower values = more hunched
+    
+    % 4. Lateral Weight Shift (Avoiding injured limb)
+    ML_features.lateral_shift = ...
+        mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1) - ...
+        mean([mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,1), ...
+              mocapstruct.markers_aligned_preproc.HindpawR(framelist_true,1)], 2);
+    
+    % 5. Tail Stiffness Index 
+    tail_movement = vecnorm(diff(mocapstruct.markers_aligned_preproc.Tail_end_(framelist_true,:)), 2, 2);
+    ML_features.tail_stiffness = 1 - (tail_movement / max(tail_movement));  % 1=rigid, 0=mobile
+    
+    % 6. Protective Paw Clustering
+    ML_features.paw_clustering = mean([
+        vectornorm(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.ForepawL(framelist_true,:), 2), ...
+        vectornorm(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.HindpawR(framelist_true,:), 2) ], 2);
 
+    %% Grooming Detection (Improved)
+    % Forepaw-to-head interaction
+    %% Improved Grooming Features (Lateral Leaning)
+    % Compute spine lateral bending (X-axis difference normalized by body length)
+    body_length = mean(vectornorm(...
+        mocapstruct.markers_aligned_preproc.SpineF(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,:), 2));
 
+    % Right grooming: Spine bends to the right (SpineF_X > SpineM_X)
+    ML_features.RGroom = (...
+        mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1) - ...
+        mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1)) / body_length;
 
-    %low rear -- shortens stance more and more
-    ML_features.low_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.SpineF(framelist_true,3);
+    % Left grooming: Spine bends to the left (SpineM_X > SpineF_X)
+    ML_features.LGroom = (...
+        mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1) - ...
+        mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1)) / body_length;
 
-    %l/r groom
-    ML_features.RGroom = mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1)-mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1);
-    ML_features.LGroom =mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1)-mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1);
+    %% Face Grooming (Separate Feature)
+    % Use vectornorm for paw-to-snout proximity (face grooming)
+    ML_features.face_groom_R = vectornorm(...
+        mocapstruct.markers_aligned_preproc.ForepawR(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.Snout(framelist_true,:), 2);
 
-
+    ML_features.face_groom_L = vectornorm(...
+        mocapstruct.markers_aligned_preproc.ForepawL(framelist_true,:), ...
+        mocapstruct.markers_aligned_preproc.Snout(framelist_true,:), 2);
 
     %% morphology features -- inter marker distances
     %     appearance_pairs = {{'HeadB','SpineF'},{'SpineF','SpineM'},{'SpineM','SpineL'},{'SpineM','Offset1'},{'Offset2','Offset1'},...
     %         {'Offset2','SpineL'},{'Offset1','SpineF'}};
-    appearance_pairs = {{'Snout','SpineF'},{'SpineF','SpineM'},{'SpineM','Tail_base_'},{'SpineM','ForepawL'},{'ForepawL','ForepawR'},...
-        {'ForepawR','Tail_base_'},{'ForepawL','SpineF'}};
-
+    % appearance_pairs = {{'Snout','SpineF'},{'SpineF','SpineM'},{'SpineM','Tail_base_'},{'SpineM','ForepawL'},{'ForepawL','ForepawR'},...
+    %     {'ForepawR','Tail_base_'},{'ForepawL','SpineF'}};
+    %
+    appearance_pairs = {{'Snout','SpineF'},...        % 1: Head-to-upper spine
+        {'SpineF','SpineM'},...       % 2: Upper-to-mid spine
+        {'SpineM','Tail_base_'},...   % 3: Mid spine-to-tail base
+        {'Tail_base_','Tail_mid_'},...% 4: Tail base-to-mid tail
+        {'Tail_mid_','Tail_end_'},... % 5: Tail curvature
+        {'SpineF','ElbowL'},...       % 6: Upper spine-to-left elbow
+        {'SpineF','ElbowR'},...       % 7: Upper spine-to-right elbow
+        {'ElbowL','ForepawL'},...     % 8: Left elbow-to-paw
+        {'ElbowR','ForepawR'},...     % 9: Right elbow-to-paw
+        {'KneeL','HindpawL'},...      % 10: Left knee-to-hindpaw
+        {'KneeR','HindpawR'},...      % 11: Right knee-to-hindpaw
+        {'ForepawL','ForepawR'},...   % 12: Forepaw width
+        {'HindpawL','HindpawR'},...    % 13: Hindpaw width
+        {'ForepawL','HindpawL'}, ...  % Left-side alignment (guarding)
+        {'ForepawR','HindpawR'}, ...  % Right-side alignment
+        {'ElbowL','KneeL'},...       % Left diagonal limb coordination
+        {'ElbowR','KneeR'},...       % Right diagonal limb coordination
+        {'SpineF','Tail_base_'}, ...  % Full spine curvature
+        {'SpineF','SpineM','Tail_base_'}, ...  % Angle at mid-spine (hunching)
+        {'Snout','Tail_base_'},... % Body contraction
+        {'SpineM','ForepawL'},...  % Left forelimb loading
+        {'SpineM','ForepawR'},...  % Right forelimb loading
+        {'SpineM','HindpawL'},...  % Left hindlimb loading
+        {'SpineM','HindpawR'},...       % Right hindlimb loading
+        {'Snout','HindpawL'}, ...  % Maximal left-side stretch
+        {'Snout','HindpawR'}, ...  % Maximal right-side stretch
+        {'ForepawL','Tail_end_'}, ... % Diagonal stretch
+        {'ForepawR','Tail_end_'},...
+        };
 
     appearance_features = zeros(size(mocapstruct.markers_preproc.Snout,1),numel(appearance_pairs));
     markers_to_loop = mocapstruct.modular_cluster_properties.cluster_markersets{2}(1:10);
@@ -242,8 +349,8 @@ if numel(framelist_true)>10 %need at least 1 s of data
 
     %% save the ML file, clear the features
     if (~overwrite_coeff)
-       save(savefilename,'-struct','ML_features','-append','-v7.3');
-       
+        save(savefilename,'-struct','ML_features','-v7.3');
+
     end
     ML_features = rmfield(ML_features,fieldnames(ML_features));
 
@@ -282,13 +389,29 @@ if numel(framelist_true)>10 %need at least 1 s of data
     params.gaussorder = 2.5;
     ML_features.trunk_vel =zeros(numel(difforders),numel(framelist_true));
     ML_features.head_vel =zeros(numel(difforders),numel(framelist_true));
-
+    % 
+    %% Relative velocity markers and names (updated indices)
     velcomp_names = {'abs','x','y','z'};
     absolute_velocity_names = {'trunk'};
-    absolute_velocity_markers = {[4:8]};
+    absolute_velocity_markers = {[4,5,6]};  % SpineF(4), SpineM(5), Tail_base_(6)
 
     rel_velocity_names = {'head','trunk','hipL','hipR','armL','armR','legL','legR'};
-    rel_velocity_markers = {[1:3],[4,5],[14],[16],[9,10],[11,12],[13,14],[15,16]};
+    rel_velocity_markers = {...
+        [1, 2, 3], ...    % head: EarL(1), EarR(2), Snout(3)
+        [4,5,6,7,8], ...  % trunk: SpineF(4)-SpineM(5)-Tail_base_(6)-Tail_mid_(7)-Tail_end_(8)
+        [19],    ...       % hipL: KneeL(19)
+        [22], ...          % hipR: KneeR(22)
+        [9,10,11],  ...    % armL: ForepawL(9), WristL(10), ElbowL(11)
+        [13,14,15], ...    % armR: ForepawR(13), WristR(14), ElbowR(15)
+        [17,18,19], ...    % legL: HindpawL(17), AnkleL(18), KneeL(19)
+        [20,21,22]      % legR: HindpawR(20), AnkleR(21), KneeR(22)
+        };
+    % velcomp_names = {'abs','x','y','z'};
+    % absolute_velocity_names = {'trunk'};
+    % absolute_velocity_markers = {[4:8]};
+    % 
+    % rel_velocity_names = {'head','trunk','hipL','hipR','armL','armR','legL','legR'};
+    % rel_velocity_markers = {[1:3],[4,5],[14],[16],[9,10],[11,12],[13,14],[15,16]};
     num_spectrogram_pcs= 15;
     for ll = 1:numel(difforders)
         fprintf('starting absolute and relative velocity for windowsize %f \n',difforders(ll));
@@ -457,85 +580,196 @@ if numel(framelist_true)>10 %need at least 1 s of data
     end
     ML_features = rmfield(ML_features,fieldnames(ML_features));
 
-
-
-    keyboard
-
     %% get joint angle features
     %saggital/cross section (ie side view)
     fprintf('computing joing angles \n');
 
+    % saggital_names = {'head_sagg','neck_sagg','spine_sagg'};
+    % saggital_pairs =  {[2,3],[3,4],[4,5]}; %head, neck, spine angles , look in the z-y plane
+    % saggital_include = [1 1 1];
+    %
+    % %transverse/overhead
+    % transverse_names = {'head_trans','neck_trans','spine_trans','hipl_trans','hipr_trans','shouldl_trans','shouldr_trans'};
+    % transverse_pairs =  {[2,3],[3,4],[4,5],[5,6],[5,7],[4,8], [4,9]}; %head, neck, spine angles , look in the z-y plane
+    % transverse_include = [1 1 1 1 1 0 0];
+    %
+    % %coronal/along spine (front view)
+    % coronal_names = {'head_coronal','hipl_coronal','hipr_coronal','shouldl_coronal','shouldr_coronal'};
+    % coronal_pairs =  {[1,3],[5,6],[5,7],[4 8], [4 9]}; %head, neck, spine angles , look in the z-y plane
+    % coronal_include = [1 1 1 0 0];
+    %
+    % %alljt names
+    % allangles_names = {'lelbow_all','larm_all','relbow_all','rarm_all','lknee_all','lshin_all','rknee_all','rshin_all'};
+    % allangles_pairs =  {[8,10],[10,11],[9,12],[12,13],[6,14],[14,15],[7,16],[16,17]}; %head, neck, spine angles , look in the z-y plane
+    % all_include = zeros(1,numel(allangles_names));
+
+
+    % ##############################
+    %  %% get joint angle features
+    % %saggital/cross section (ie side view)
+    % fprintf('computing joing angles \n');
+    %
+    % saggital_names = {'head_sagg','neck_sagg','spine_sagg'};
+    % saggital_pairs = {[2,3],[3,4],[4,5]}; %head, neck, spine angles, look in the z-y plane
+    % saggital_include = [1 1 1];
+    %
+    % %transverse/overhead
+    % transverse_names = {'head_trans','neck_trans','spine_trans','hipl_trans','hipr_trans','shouldl_trans','shouldr_trans'};
+    % transverse_pairs = {[1,2],[2,3],[3,4],[5,6],[5,7],[8,14],[9,16]}; %head, neck, spine, hips and shoulders angles, look in the x-y plane
+    % transverse_include = [1 1 1 1 1 0 0];
+    %
+    % %coronal/along spine (front view)
+    % coronal_names = {'head_coronal','hipl_coronal','hipr_coronal','shouldl_coronal','shouldr_coronal'};
+    % coronal_pairs = {[1,3],[5,12],[5,13],[8,15],[9,17]}; %head tilt, hip angles, shoulder angles, look in the x-z plane
+    % coronal_include = [1 1 1 0 0];
+    %
+    % %alljt names
+    % allangles_names = {'lelbow_all','larm_all','relbow_all','rarm_all','lknee_all','lshin_all','rknee_all','rshin_all'};
+    % allangles_pairs = {[14,15],[10,14],[16,17],[11,16],[12,18],[6,12],[13,19],[7,13]}; %arms and legs joints angles, all planes
+    % all_include = zeros(1,numel(allangles_names));
+    %
+    % %% specify the specific angles for the different appendages
+    % appendage_names = {'Head','LArm','Rarm','trunk','LLeg','RLeg'};
+    % appendage_anglegps = cell(1,numel(appendage_names));
+    % appendage_anglegps{1} = {'head_sagg','neck_sagg','head_trans','neck_trans','head_coronal'};
+    % appendage_anglegps{2} = {'shouldl_trans','shouldl_coronal','lelbow_all','larm_all'};
+    % appendage_anglegps{3} = {'shouldr_trans','shouldr_coronal','relbow_all','rarm_all'};
+    % appendage_anglegps{4} = {'spine_sagg','spine_trans'};
+    % appendage_anglegps{5} = {'hipl_trans','hipl_coronal','lknee_all','lshin_all'};
+    % appendage_anglegps{6} = {'hipr_trans','hipr_coronal','rknee_all','rshin_all'};
+    %
+    % ML_features.appendage_names = appendage_names;
+    %
+    % %% appendage segment lengths
+    % appendage_segvals = cell(1,numel(appendage_names));
+    % appendage_segvals{1} = [1,2,3];
+    % appendage_segvals{2} = [8,10,11];
+    % appendage_segvals{3} = [9,12,13];%'shouldr_trans','shouldr_coronal','relbow_all','rarm_all'};
+    % appendage_segvals{4} = [4,5];
+    % appendage_segvals{5} = [6,14,15];%'hipl_trans','hipl_coronal','lknee_all','lshin_all'};
+    % appendage_segvals{6} = [7,16,17];
+    %
+    %
+    % saggital_inds = [2,3];
+    % coronal_inds = [1,3];
+    % transverse_inds = [1,2];
+    % allangles_inds = [1,2,3]; %use on knees and arms
+    % %transverse_pairs
+    %
+    % %% get the various
+    % %     segment_pairs = {{'HeadB','HeadL'},{'HeadF','HeadB'},{'HeadB','SpineF'},{'SpineF','SpineM'} ,...%1-4
+    % %         {'SpineL','SpineM'},{'SpineL','HipL'},{'SpineL','HipR'},... %5-7
+    % %         {'SpineF','ShoulderL'},{'SpineF','ShoulderR'},... %8,9
+    % %         {'ShoulderL','ElbowL'},{'ElbowL','ArmL'},{'ShoulderR','ElbowR'},{'ElbowR','ArmR'},...%10-13
+    % %         {'HipL','KneeL'},{'KneeL','ShinL'},{'HipR','KneeR'},{'KneeR','ShinR'}}; %14-17
+    %
+    % % segment_pairs = {{'EarR','EarL'},{'Snout','EarR'},{'EarR','SpineF'},{'SpineF','SpineM'} ,...%1-4
+    % %     {'Tail_base_','SpineM'},{'Tail_base_','HindlimbL'},{'Tail_base_','HindlimbR'},... %5-7
+    % %     {'SpineF','ForelimbL'},{'SpineF','ForelimbR'},... %8,9
+    % %     {'ForelimbL','ForepawL'},{'ForelimbR','ForepawR'},...%10-13
+    % %     {'HindlimbL','HindpawL'},{'HindlimbR','HindpawR'}...%14-17
+    % %     }; %18,19
+    %   segment_pairs =  {{'EarR','EarL'},{'Snout','EarR'},{'EarR','SpineF'},{'SpineF','SpineM'} ,...%1-4
+    % {'Tail_base_','SpineM'},{'Tail_base_','KneeL'},{'Tail_base_','KneeR'},... %5-7
+    % {'SpineF','ShoulderL'},{'SpineF','ShoulderR'},... %8,9
+    % {'ElbowL','WristL'},{'ElbowR','WristR'},...%10-13
+    % {'KneeL','AnkleL'},{'KneeR','AnkleR'}...%14-17
+    % {'ForepawL','ElbowL'},{'ElbowL','ShoulderL'},...
+    % {'ForepawR','ElbowR'},{'ElbowR','ShoulderR'},...
+    % {'HindpawL','AnkleL'},{'HindpawR','AnkleR'},{'Tail_base_','Tail_mid_'}};
+
+    % #####################
+    %% Define segment pairs (corrected wrists)
+    segment_pairs = {...
+        {'EarR','EarL'}, ...                    % 1: EarR-EarL (transverse head axis)
+        {'Snout','EarR'}, ...                   % 2: Snout-EarR (sagittal head)
+        {'EarR','SpineF'}, ...                  % 3: EarR-SpineF (neck)
+        {'SpineF','SpineM'}, ...                % 4: SpineF-SpineM (upper spine)
+        {'Tail_base_','SpineM'}, ...            % 5: SpineM-Tail_base_ (lower spine)
+        {'Tail_base_','KneeL'}, ...             % 6: Tail_base_-KneeL (left hip)
+        {'Tail_base_','KneeR'}, ...             % 7: Tail_base_-KneeR (right hip)
+        {'SpineF','ShoulderL'}, ...             % 8: SpineF-ShoulderL (left shoulder)
+        {'SpineF','ShoulderR'}, ...             % 9: SpineF-ShoulderR (right shoulder)
+        {'ElbowL','WristL'}, ...                % 10: ElbowL-WristL (left lower arm)
+        {'ElbowR','WristR'}, ...                % 11: ElbowR-WristR (right lower arm)
+        {'KneeL','AnkleL'}, ...                 % 12: KneeL-AnkleL (left shin)
+        {'KneeR','AnkleR'}, ...                 % 13: KneeR-AnkleR (right shin)
+        {'WristL','ForepawL'}, ...              % 14: WristL-ForepawL (left paw) *CORRECTED*
+        {'ShoulderL','ElbowL'}, ...             % 15: ShoulderL-ElbowL (left upper arm)
+        {'WristR','ForepawR'}, ...              % 16: WristR-ForepawR (right paw) *CORRECTED*
+        {'ShoulderR','ElbowR'}, ...             % 17: ShoulderR-ElbowR (right upper arm)
+        {'AnkleL','HindpawL'}, ...              % 18: AnkleL-HindpawL (left hind paw)
+        {'AnkleR','HindpawR'}, ...              % 19: AnkleR-HindpawR (right hind paw)
+        {'Tail_base_','Tail_mid_'} ...          % 20: Tail_base_-Tail_mid_ (tail)
+        };
+
+    %% Get joint angle features
+    fprintf('Computing joint angles \n');
+
+    % Sagittal plane (Y-Z)
     saggital_names = {'head_sagg','neck_sagg','spine_sagg'};
-    saggital_pairs =  {[2,3],[3,4],[4,5]}; %head, neck, spine angles , look in the z-y plane
+    saggital_pairs = {[2,3], [3,4], [4,5]};  % Snout-EarR to EarR-SpineF, etc.
     saggital_include = [1 1 1];
 
-    %transverse/overhead
+    % Transverse plane (X-Y)
     transverse_names = {'head_trans','neck_trans','spine_trans','hipl_trans','hipr_trans','shouldl_trans','shouldr_trans'};
-    transverse_pairs =  {[2,3],[3,4],[4,5],[5,6],[5,7],[4 8 ], [4 9 ],}; %head, neck, spine angles , look in the z-y plane
+    transverse_pairs = {[1,2], [1,3], [4,5], [6,5], [7,5], [8,15], [9,17]};
     transverse_include = [1 1 1 1 1 0 0];
 
-    %coronal/along spine (front view)
+    % Coronal plane (X-Z)
     coronal_names = {'head_coronal','hipl_coronal','hipr_coronal','shouldl_coronal','shouldr_coronal'};
-    coronal_pairs =  {[1,3],[5,6],[5,7],[4 8], [4 9]}; %head, neck, spine angles , look in the z-y plane
+    coronal_pairs = {[2,3], [6,12], [7,13], [8,15], [9,17]};
     coronal_include = [1 1 1 0 0];
 
-    %alljt names
-    allangles_names = {'lelbow_all','larm_all','relbow_all','rarm_all','lknee_all','lshin_all','rknee_all','rshin_all'};
-    allangles_pairs =  {[8,10],[10,11],[9,12],[12,13],[6,14],[14,15],[7,16],[16,17]}; %head, neck, spine angles , look in the z-y plane
+    % All-angles (3D)
+    allangles_names = {'lelbow_all','larm_all','lwrist_all','relbow_all','rarm_all','rwrist_all','lknee_all','lshin_all','rknee_all','rshin_all'};
+    allangles_pairs = {...
+        [15,10], ...    % lelbow_all: ShoulderL-ElbowL to ElbowL-WristL
+        [8,15], ...     % larm_all: SpineF-ShoulderL to ShoulderL-ElbowL
+        [10,14], ...    % lwrist_all: ElbowL-WristL to WristL-ForepawL
+        [17,11], ...    % relbow_all: ShoulderR-ElbowR to ElbowR-WristR
+        [9,17], ...     % rarm_all: SpineF-ShoulderR to ShoulderR-ElbowR
+        [11,16], ...    % rwrist_all: ElbowR-WristR to WristR-ForepawR
+        [6,12], ...     % lknee_all: Tail_base_-KneeL to KneeL-AnkleL
+        [12,18], ...    % lshin_all: KneeL-AnkleL to AnkleL-HindpawL
+        [7,13], ...     % rknee_all: Tail_base_-KneeR to KneeR-AnkleR
+        [13,19] ...     % rshin_all: KneeR-AnkleR to AnkleR-HindpawR
+        };
     all_include = zeros(1,numel(allangles_names));
 
-    %% specify the specific angles for the different appendages
+    %% Appendage angle groups (updated with wrists)
     appendage_names = {'Head','LArm','Rarm','trunk','LLeg','RLeg'};
     appendage_anglegps = cell(1,numel(appendage_names));
     appendage_anglegps{1} = {'head_sagg','neck_sagg','head_trans','neck_trans','head_coronal'};
-    appendage_anglegps{2} = {'shouldl_trans','shouldl_coronal','lelbow_all','larm_all'};
-    appendage_anglegps{3} = {'shouldr_trans','shouldr_coronal','relbow_all','rarm_all'};
+    appendage_anglegps{2} = {'shouldl_trans','shouldl_coronal','lelbow_all','larm_all','lwrist_all'}; % LArm
+    appendage_anglegps{3} = {'shouldr_trans','shouldr_coronal','relbow_all','rarm_all','rwrist_all'}; % Rarm
     appendage_anglegps{4} = {'spine_sagg','spine_trans'};
     appendage_anglegps{5} = {'hipl_trans','hipl_coronal','lknee_all','lshin_all'};
     appendage_anglegps{6} = {'hipr_trans','hipr_coronal','rknee_all','rshin_all'};
 
-    ML_features.appendage_names = appendage_names;
-
-    %% appendage segment lengths
+    %% Appendage segment lengths (updated indices)
     appendage_segvals = cell(1,numel(appendage_names));
-    appendage_segvals{1} = [1,2,3];
-    appendage_segvals{2} = [8,10,11];
-    appendage_segvals{3} = [9,12,13];%'shouldr_trans','shouldr_coronal','relbow_all','rarm_all'};
-    appendage_segvals{4} = [4,5];
-    appendage_segvals{5} = [6,14,15];%'hipl_trans','hipl_coronal','lknee_all','lshin_all'};
-    appendage_segvals{6} = [7,16,17];
+    appendage_segvals{1} = [1, 2, 3];       % Head: EarR-EarL(1), Snout-EarR(2), EarR-SpineF(3)
+    appendage_segvals{2} = [15, 10, 14];    % LArm: ShoulderL-ElbowL(15), ElbowL-WristL(10), WristL-ForepawL(14)
+    appendage_segvals{3} = [17, 11, 16];    % Rarm: ShoulderR-ElbowR(17), ElbowR-WristR(11), WristR-ForepawR(16)
+    appendage_segvals{4} = [4, 5];          % Trunk: SpineF-SpineM(4), SpineM-Tail_base_(5)
+    appendage_segvals{5} = [6, 12, 18];     % LLeg: Tail_base_-KneeL(6), KneeL-AnkleL(12), AnkleL-HindpawL(18)
+    appendage_segvals{6} = [7, 13, 19];     % RLeg: Tail_base_-KneeR(7), KneeR-AnkleR(13), AnkleR-HindpawR(19)
 
+    %% Plane indices (unchanged, but verified)
+    saggital_inds = [2, 3];     % Y-Z plane (side view)
+    coronal_inds = [1, 3];      % X-Z plane (front view)
+    transverse_inds = [1, 2];   % X-Y plane (overhead)
+    allangles_inds = [1, 2, 3]; % 3D space (X-Y-Z)
 
-    saggital_inds = [2,3];
-    coronal_inds = [1,3];
-    transverse_inds = [1,2];
-    allangles_inds = [1,2,3]; %use on knees and arms
-    %transverse_pairs
-
-    %% get the various
-    %     segment_pairs = {{'HeadB','HeadL'},{'HeadF','HeadB'},{'HeadB','SpineF'},{'SpineF','SpineM'} ,...%1-4
-    %         {'SpineL','SpineM'},{'SpineL','HipL'},{'SpineL','HipR'},... %5-7
-    %         {'SpineF','ShoulderL'},{'SpineF','ShoulderR'},... %8,9
-    %         {'ShoulderL','ElbowL'},{'ElbowL','ArmL'},{'ShoulderR','ElbowR'},{'ElbowR','ArmR'},...%10-13
-    %         {'HipL','KneeL'},{'KneeL','ShinL'},{'HipR','KneeR'},{'KneeR','ShinR'}}; %14-17
-
-    % segment_pairs = {{'EarR','EarL'},{'Snout','EarR'},{'EarR','SpineF'},{'SpineF','SpineM'} ,...%1-4
-    %     {'Tail_base_','SpineM'},{'Tail_base_','HindlimbL'},{'Tail_base_','HindlimbR'},... %5-7
-    %     {'SpineF','ForelimbL'},{'SpineF','ForelimbR'},... %8,9
-    %     {'ForelimbL','ForepawL'},{'ForelimbR','ForepawR'},...%10-13
-    %     {'HindlimbL','HindpawL'},{'HindlimbR','HindpawR'}...%14-17
-    %     }; %18,19
-      segment_pairs =  {{'EarR','EarL'},{'Snout','EarR'},{'EarR','SpineF'},{'SpineF','SpineM'} ,...%1-4
-    {'Tail_base_','SpineM'},{'Tail_base_','KneeL'},{'Tail_base_','KneeR'},... %5-7
-    {'SpineF','ShoulderL'},{'SpineF','ShoulderR'},... %8,9
-    {'ElbowL','WristL'},{'ElbowR','WristR'},...%10-13
-    {'KneeL','AnkleL'},{'KneeR','AnkleR'}...%14-17
-    {'ForepawL','ElbowL'},{'ElbowL','ShoulderL'},...
-    {'ForepawR','ElbowR'},{'ElbowR','ShoulderR'},...
-    {'HindpawL','AnkleL'},{'HindpawR','AnkleR'},{'Tail_base_','Tail_mid_'}};
-
-
-
+    %%
+    % Validation Table:
+    % Appendage	Old Segments	New Segments	Anatomical Meaning
+    % LArm	[8,10,11]	[15,10,14]	Upper arm → forearm → paw
+    % Rarm	[9,12,13]	[17,11,16]	Upper arm → forearm → paw
+    % LLeg	[6,14,15]	[6,12,18]	Hip → knee → hindpaw
+    % RLeg	[7,16,17]	[7,13,19]	Hip → knee → hindpaw
+    %%
 
 
 

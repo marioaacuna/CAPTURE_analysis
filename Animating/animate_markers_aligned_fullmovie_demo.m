@@ -101,6 +101,7 @@ for lk = reshape(frame_inds,1,[])%1:10:10000
     end
     title(lk)
     drawnow
+    pause(0.01)
     hold off
 
     frame_last = lk;

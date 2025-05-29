@@ -15,7 +15,7 @@ GC = general_configs();
 
 %% INIT
 % Get prediction concatenation settings
-settings = get_prediction_concat_settings();
+settings = get_settings_concat_preds();
 
 % Unpack settings into variables
 overwrite_pred_concat = settings.overwrite_pred_concat;
@@ -255,13 +255,26 @@ end
 %% Plot dim red
 zvals_filename = fullfile(roothpath_CAPTURE, 'zvals.mat');
 perplexity = GC.perplexity; % 200;
+analysisstruct.tsnegranularity = analysisparams.tsnegranularity;
 
 if ~exist(zvals_filename, 'file') || overwrite_zvals
 
     %run tsne
     disp('%% Running TSNE %%')
-    zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
-    % save zvals to then read later if necessary
+    % 1. Load extra features (Here we assume that the extra features were already done - powerful PC)
+    temp_dir = 'H:\Mario\DANNCE\CAPTURE_results\250131\extraFeatures'; % needs to be changed later
+    savefilename =fullfile(temp_dir,'myMLfeatures.mat');
+    MLmatobj_extra =matfile(savefilename);
+    jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
+    
+    
+    % 2. Do TSNE
+    rng default % For reproducibility
+    zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200);
+
+    % OLD (only few features)-> zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
+    
+    % 3. save zvals to then read later if necessary
     save(zvals_filename, 'zvals','-mat')
 
     % Plot TSNE per animal
@@ -271,6 +284,8 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
     title({['Granu: ',num2str(analysisparams.tsnegranularity)], ['Perp: ', num2str(perplexity)]})
     set(gcf,'Position',([100 100 1100 1100]))
     set(gcf, 'color', 'w')
+    analysisstruct.extra_jt_features = jt_features_extra;
+
 else
     disp(' Loading TSNE zvals')
     load(zvals_filename)
@@ -288,7 +303,6 @@ analysisstruct.params.expansion_factor = GC.expansion_factor; %add a little room
 analysisstruct.params.density_threshold = GC.density_threshold; %remove regions in plots with low density
 analysisstruct.matchedconds = {[unique(analysisstruct.condition_inds)]}; %if running over multiple conditions
 analysisstruct.conditions_to_run = [unique(analysisstruct.condition_inds)];
-analysisstruct.tsnegranularity = analysisparams.tsnegranularity;
 
 params.reorder=1;
 analysisstruct = compute_analysis_clusters_demo(analysisstruct,params); % check line 248, cluster_tsne_map.m
