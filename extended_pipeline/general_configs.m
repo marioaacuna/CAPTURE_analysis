@@ -18,13 +18,14 @@ function GC = general_configs()
         project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\extended_pipeline';
         drive_V = 'V:\';
     elseif ismac
-        mac_name = 'marioacuna';
-        project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics/extended_pipeline');
+        %mac_name = 'marioacuna';
+        project_path =  fullfile('~/Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics/extended_pipeline');
         if ~exist(project_path, 'dir')
-            mac_name = 'mario';
-            project_path =  fullfile('/Users',mac_name,'Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
+            %mac_name = 'mario';
+            project_path =  fullfile('~/Library/CloudStorage/OneDrive-UniversitaetBern/Spontaneous_pain_kinematics');
         end
-        temp_root = fullfile('/Users',mac_name,'Documents/Temp_analysis/CAPTURE');
+        temp_root = fullfile('~/Documents/Temp_analysis/CAPTURE');
+        drive_V = '/Volumes/V/';
     elseif isunix
         project_path = '/home/mario/Documents/Spontaneous_pain_kinematics';
         temp_root = '/home/mario/Documents/Temp_analysis/CAPTURE';

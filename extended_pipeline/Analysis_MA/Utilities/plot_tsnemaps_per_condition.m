@@ -6,6 +6,19 @@ clc;
 GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
 
+% Configuration for visualization and export
+debugging = false;  % Set to true for debugging mode
+if debugging
+    visualize = 'on';  % Show figures during debugging
+    do_export = false;  % Don't export during debugging
+else
+    visualize = 'off';  % Don't show figures in production mode
+    do_export = true;   % Export figures in production mode
+end
+
+% Export folder
+export_folder = '~/Desktop/figs_presentation_painAI';
+
 
 %% Load Data
 logger('Loading data', 'INFO');
@@ -48,7 +61,7 @@ zvals = analysisstruct.zValues;
 %% Create density maps for each condition comparison
 % 1. S vs F comparison
 logger('Plotting S vs F comparison', 'INFO');
-figure('Name', 'Density Maps: S vs F', 'Color', 'w', 'Position', [100, 100, 800, 400]);
+fig_SF_density = figure('Name', 'Density Maps: S vs F', 'Color', 'w', 'Position', [100, 100, 800, 400], 'Visible', visualize);
 
 % S condition
 subplot(1, 2, 1);
@@ -58,6 +71,7 @@ set(h_S, 'Color', 'w');
 plotdensitymaps({zvals(idx_S,:)}, 1, h_S, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition S');
+axis square
 
 % F condition
 subplot(1, 2, 2);
@@ -67,10 +81,17 @@ set(h_F, 'Color', 'w');
 plotdensitymaps({zvals(idx_F,:)}, 1, h_F, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition F');
+axis square
+
+% Export the figure if needed
+if do_export
+    logger(['Exporting S vs F density map to: ' export_folder], 'INFO');
+    exportgraphics(fig_SF_density, [export_folder '/density_map_SF_comparison.pdf'], 'ContentType', 'vector', 'BackgroundColor', 'none');
+end
 
 % 2. H vs N comparison
 logger('Plotting H vs N comparison', 'INFO');
-figure('Name', 'Density Maps: H vs N', 'Color', 'w', 'Position', [100, 100, 800, 400]);
+fig_HN_density = figure('Name', 'Density Maps: H vs N', 'Color', 'w', 'Position', [100, 100, 800, 400], 'Visible', visualize);
 
 % H condition
 subplot(1, 2, 1);
@@ -80,6 +101,7 @@ set(h_H, 'Color', 'w');
 plotdensitymaps({zvals(idx_H,:)}, 1, h_H, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition H');
+axis square
 
 % N condition
 subplot(1, 2, 2);
@@ -89,10 +111,17 @@ set(h_N, 'Color', 'w');
 plotdensitymaps({zvals(idx_N,:)}, 1, h_N, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition N');
+axis square
+
+% Export the figure if needed
+if do_export
+    logger(['Exporting H vs N density map to: ' export_folder], 'INFO');
+    exportgraphics(fig_HN_density, [export_folder '/density_map_HN_comparison.pdf'], 'ContentType', 'vector', 'BackgroundColor', 'none');
+end
 
 % 3. B vs S vs H comparison
 logger('Plotting B vs S vs H comparison', 'INFO');
-figure('Name', 'Density Maps: B vs S vs H', 'Color', 'w', 'Position', [100, 100, 1200, 400]);
+fig_BSH_density = figure('Name', 'Density Maps: B vs S vs H', 'Color', 'w', 'Position', [100, 100, 1200, 400], 'Visible', visualize);
 
 % B condition
 subplot(1, 3, 1);
@@ -102,6 +131,7 @@ set(h_B, 'Color', 'w');
 plotdensitymaps({zvals(idx_B,:)}, 1, h_B, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition B');
+axis square
 
 % S condition (reusing idx_S from above)
 subplot(1, 3, 2);
@@ -110,6 +140,7 @@ set(h_S2, 'Color', 'w');
 plotdensitymaps({zvals(idx_S,:)}, 1, h_S2, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition S');
+axis square
 
 % H condition (reusing idx_H from above)
 subplot(1, 3, 3);
@@ -118,11 +149,18 @@ set(h_H2, 'Color', 'w');
 plotdensitymaps({zvals(idx_H,:)}, 1, h_H2, analysisstruct.params.density_width, ...
     max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
 title('Condition H');
+axis square
+
+% Export the figure if needed
+if do_export
+    logger(['Exporting B vs S vs H density map to: ' export_folder], 'INFO');
+    exportgraphics(fig_BSH_density, [export_folder '/density_map_BSH_comparison.pdf'], 'ContentType', 'vector', 'BackgroundColor', 'none');
+end
 
 %% Create scatter plots for each comparison
 % 1. S vs F scatter plot
 logger('Creating scatter plot for S vs F', 'INFO');
-figure('Name', 'Scatter Plot: S vs F', 'Color', 'w');
+fig_SF_scatter = figure('Name', 'Scatter Plot: S vs F', 'Color', 'w', 'Visible', visualize);
 hold on;
 scatter(zvals(idx_S,1), zvals(idx_S,2), 10, color_map('S'), 'Marker', '.', 'DisplayName', 'S');
 scatter(zvals(idx_F,1), zvals(idx_F,2), 10, color_map('F'), 'Marker', '.', 'DisplayName', 'F');
@@ -133,9 +171,15 @@ xlabel('t-SNE Dimension 1');
 ylabel('t-SNE Dimension 2');
 axis equal tight;
 
+% Export the figure if needed
+if do_export
+    logger(['Exporting S vs F scatter plot to: ' export_folder], 'INFO');
+    exportgraphics(fig_SF_scatter, [export_folder '/scatter_plot_SF_comparison.pdf'], 'ContentType', 'vector', 'BackgroundColor', 'none');
+end
+
 % 2. H vs N scatter plot
 logger('Creating scatter plot for H vs N', 'INFO');
-figure('Name', 'Scatter Plot: H vs N', 'Color', 'w');
+fig_HN_scatter = figure('Name', 'Scatter Plot: H vs N', 'Color', 'w', 'Visible', visualize);
 hold on;
 scatter(zvals(idx_H,1), zvals(idx_H,2), 10, color_map('H'), 'Marker', '.', 'DisplayName', 'H');
 scatter(zvals(idx_N,1), zvals(idx_N,2), 10, color_map('N'), 'Marker', '.', 'DisplayName', 'N');
@@ -146,9 +190,15 @@ xlabel('t-SNE Dimension 1');
 ylabel('t-SNE Dimension 2');
 axis equal tight;
 
+% Export the figure if needed
+if do_export
+    logger(['Exporting H vs N scatter plot to: ' export_folder], 'INFO');
+    exportgraphics(fig_HN_scatter, [export_folder '/scatter_plot_HN_comparison.pdf'], 'ContentType', 'vector', 'BackgroundColor', 'none');
+end
+
 % 3. B vs S vs H scatter plot
 logger('Creating scatter plot for B vs S vs H', 'INFO');
-figure('Name', 'Scatter Plot: B vs S vs H', 'Color', 'w');
+fig_BSH_scatter = figure('Name', 'Scatter Plot: B vs S vs H', 'Color', 'w', 'Visible', visualize);
 hold on;
 scatter(zvals(idx_B,1), zvals(idx_B,2), 10, color_map('B'), 'Marker', '.', 'DisplayName', 'B');
 scatter(zvals(idx_S,1), zvals(idx_S,2), 10, color_map('S'), 'Marker', '.', 'DisplayName', 'S');
@@ -159,5 +209,11 @@ title('B vs S vs H t-SNE Map');
 xlabel('t-SNE Dimension 1');
 ylabel('t-SNE Dimension 2');
 axis equal tight;
+
+% Export the figure if needed
+if do_export
+    logger(['Exporting B vs S vs H scatter plot to: ' export_folder], 'INFO');
+    exportgraphics(fig_BSH_scatter, [export_folder '/scatter_plot_BSH_comparison.pdf'], 'ContentType', 'vector', 'BackgroundColor', 'none');
+end
 
 logger('Plotting complete', 'INFO');
