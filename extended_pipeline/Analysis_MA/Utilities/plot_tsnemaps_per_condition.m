@@ -17,7 +17,11 @@ else
 end
 
 % Export folder
-export_folder = '~/Desktop/figs_presentation_painAI';
+export_folder = fullfile(GC.temp_root, 'figs_presentation_painAI');
+if ~exist(export_folder, 'dir')
+    mkdir(export_folder);
+end
+% export_folder = '~/Desktop/figs_presentation_painAI';
 
 
 %% Load Data

@@ -50,7 +50,9 @@ logger('Analyzing angles at walking', 'INFO');
 markers = markers_aligned_ds;
 
 % Calculate angles and perform analysis
-analyze_angles(markers, walking_bouts, conditions, unique_conditions, frame_identifiers, animal_condition_identifier);
+do_export_figs = 1;
+
+analyze_angles(markers, walking_bouts, conditions, unique_conditions, frame_identifiers, animal_condition_identifier, do_export_figs);
 
 disp('done')
 

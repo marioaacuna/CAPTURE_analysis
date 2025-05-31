@@ -1,13 +1,23 @@
-%% Peamble
-% this script outputs representative videos of predictions and ms video for
+%% Preamble
+% This script outputs representative videos of predictions and ms video for
 % a particular animal and a particular session. So far, this is only for
 % showing-off reasons, maybe putting them in a presentation and so. 
-% Variables
-%           - animal_ID
-%           - session
-%           - path in
-%           - path out
-% The basis of this analysis is the use of cluester ids and and output only
+% 
+% UPDATED VERSION: Now supports multiple conditions (baseline and Formalin_injection)
+% and uses flexible path structure for data from multiple sources.
+%
+% Variables:
+%   - animal_ID: Animal identifier (e.g., 'ID_1386')
+%   - condition: 'baseline' or 'Formalin_injection'
+%   - Data sources:
+%     * Behavior videos: K:\Mario\BioMed_students_2023\Anna\exp_6cam_miniscope_data\[condition]\6cam_data\[animal]\[date]\videos\Camera1\0.mp4
+%     * FOV recordings: K:\Ca_imaging_pain\2_motion_corrected_movies\[animal]\[animal]_[date]_SP.h5
+%     * Raw miniscope: K:\Mario\BioMed_students_2023\Anna\exp_6cam_miniscope_data\[condition]\miniscope_data\[animal]\[date_miniscope]\msCam0.avi
+%     * Predictions: [behavior_path]\DANNCE\predict_results\predictions.mat
+%     * Clusters: From preprocessing pipeline clusters_struct.mat
+%     * Analysis struct: From general_configs filename_analysis
+%
+% The basis of this analysis is the use of cluster ids and output only
 % those frames that belong to a cluster. We need to output the 3D predictions,
 % and the neuronal activity (FOV of active neurons)
 % They all have different frame rates, however, they all have the same duration
@@ -22,6 +32,7 @@
 %   Predictions: this is a matfile structure that contains cells representing each
 %       body part. Frame rate 120. This is not centered, just raw.
 %   behavior: This is a mp4 file from a single camera. Frame rate 120 Hz.
+%   Raw miniscope: This is an avi file with raw calcium imaging data. Frame rate ~20 Hz.
 
 
 %%
@@ -33,30 +44,88 @@ TEST_clusters = 0; % if debugging to test cluster ids
 %%
 global FR_to_downsample
 
-% Paths
-FOV_file = fullfile("D:\test_CAPTURE\328\miniscope_recordings\JH_328_230620_SP.h5");
-cluster_file = fullfile("D:\test_CAPTURE\328\cluster_vector.mat");
-predictions_file = fullfile("D:\test_CAPTURE\328\predictions.mat");
-behavior_file = fullfile("D:\test_CAPTURE\328\videos\Camera1\0.mp4");
-ROIs_file = fullfile("D:\test_CAPTURE\328\ROI_traces\JH_328_ROI_info.mat");
-analysisstruct_filename = fullfile("D:\test_CAPTURE\CAPTURE\analysisstruct_clusters.mat");
+% Add general configs
+GC = general_configs();
+
+% Configuration
+animal_to_take = 'ID_1386';
+condition = 'Formalin_injection'; % 'baseline' or 'Formalin_injection'
+
+% Define condition-specific parameters
+condition_info = struct();
+condition_info.baseline.folder = 'baseline';
+condition_info.baseline.date = '240918';
+condition_info.baseline.date_miniscope = '20240918';
+condition_info.baseline.cluster_suffix = 'B';
+
+condition_info.Formalin_injection.folder = 'Formalin_injection';
+condition_info.Formalin_injection.date = '241030';
+condition_info.Formalin_injection.date_miniscope = '241030';
+condition_info.Formalin_injection.cluster_suffix = 'F';
+
+% Root paths
+behavior_rootpath = 'K:\Mario\BioMed_students_2023\Anna\exp_6cam_miniscope_data';
+FOV_rootpath = 'K:\Ca_imaging_pain\2_motion_corrected_movies';
+miniscope_raw_rootpath = 'K:\Mario\BioMed_students_2023\Anna\exp_6cam_miniscope_data';
+
+% Get condition-specific info
+curr_condition = condition_info.(condition);
+
+% Build paths based on condition
+sixcam_path = fullfile(behavior_rootpath, curr_condition.folder, '6cam_data', animal_to_take, curr_condition.date);
+behavior_file = fullfile(sixcam_path, 'videos', 'Camera1', '0.mp4');
+predictions_file = fullfile(sixcam_path, 'DANNCE', 'predict_results', 'predictions.mat');
+
+% FOV file path
+FOV_file = fullfile(FOV_rootpath, animal_to_take, [animal_to_take, '_', curr_condition.date, '_SP.h5']);
+
+% Alternative raw miniscope file
+raw_miniscope_file = fullfile(miniscope_raw_rootpath, curr_condition.folder, 'miniscope_data', animal_to_take, curr_condition.date_miniscope, 'msCam0.avi');
+
+% Cluster file from preprocessing
+clusters_struct_file = fullfile(GC.preprocessing_rootpath, 'clusters_struct.mat');
+cluster_field_name = [animal_to_take, '_', curr_condition.cluster_suffix];
+
+% Analysis struct file
+analysisstruct_filename = GC.filename_analysis;
 
 % Load files
 h5_info = h5info(FOV_file);
 dataset = '/1'; %dataset of h5 file
 %read here h5 file
 h5_data = h5read(FOV_file, dataset);
-% read clusters vector
-clusters = load(cluster_file);
-clusters = clusters.clusters;
+
+% Load alternative raw miniscope file
+if exist(raw_miniscope_file, 'file')
+    raw_miniscope_video = VideoReader(raw_miniscope_file);
+    raw_miniscope_FR = raw_miniscope_video.FrameRate;
+    fprintf('Raw miniscope video found with frame rate: %.2f Hz\n', raw_miniscope_FR);
+else
+    warning('Raw miniscope file not found: %s', raw_miniscope_file);
+    raw_miniscope_video = [];
+end
+
+% read clusters vector from clusters_struct
+if exist(clusters_struct_file, 'file')
+    clusters_data = load(clusters_struct_file);
+    if isfield(clusters_data.clusters_struct, cluster_field_name)
+        clusters = clusters_data.clusters_struct.(cluster_field_name);
+        fprintf('Loaded clusters for %s\n', cluster_field_name);
+    else
+        error('Cluster field %s not found in clusters_struct', cluster_field_name);
+    end
+else
+    error('Clusters struct file not found: %s', clusters_struct_file);
+end
+
 % read predictions
 pred = load(predictions_file);
 % pred = pred.predictions;
 predictions = pred.predictions;
+
 % read behavioral movie
 beh_movie = VideoReader(behavior_file);
-% read ROIs
-load(ROIs_file);
+
 % Load analysis struct
 load(analysisstruct_filename)
 
@@ -171,40 +240,40 @@ assert(length(clusters_ds_interp) == length(frames_to_read_FOV));
 % clusters_ds = clusters_ds(1:min_length);
 
 %%
-% Read ROIs
+% Read ROIs - commented out for now as we're not using the mask
 % TODO, load ROI info from animal
 % ROIs
 % Transform ROIS for mask
 % Assuming your image size is MxN
-FOV_size = size(ROIs);
+FOV_size = size(h5_data);
 FOV_size = FOV_size([1,2]);
-M = FOV_size(1);  % replace with your image size
+M = FOV_size(1); 
 N = FOV_size(2);
 
-% Initialize the mask to zeros
-mask = zeros(M, N);
+% Initialize the mask to zeros (no mask for now)
+mask = ones(M, N); % Use ones to not mask anything
 
-% Define the expansion size (in pixels)
-expand_size = 5;
-
-% Create a disk-shaped structuring element for dilation
-SE = strel('disk', expand_size);
-
-% Loop over each ROI
-for i = 1:size(ROI_info, 1)
-    x = ROI_info{i, 5}(:, 1);
-    y = ROI_info{i, 5}(:, 2);
-    
-    % Method 1: Expand the polygon and then create the mask
-    roi_mask = poly2mask(x, y, M, N);
-    roi_mask_dilated = imdilate(roi_mask, SE);
-    mask = mask | roi_mask_dilated;
-
-    % Method 2: Create a round shape from the centroid
-    % centroid = mean([x, y]);
-    % circle_mask = insertShape(zeros(M, N, 'uint8'), 'FilledCircle', [centroid, expand_size*2], 'Color', 'white', 'Opacity', 1);
-    % mask = mask | circle_mask;
-end
+% % Define the expansion size (in pixels)
+% expand_size = 5;
+% 
+% % Create a disk-shaped structuring element for dilation
+% SE = strel('disk', expand_size);
+% 
+% % Loop over each ROI
+% for i = 1:size(ROI_info, 1)
+%     x = ROI_info{i, 5}(:, 1);
+%     y = ROI_info{i, 5}(:, 2);
+%     
+%     % Method 1: Expand the polygon and then create the mask
+%     roi_mask = poly2mask(x, y, M, N);
+%     roi_mask_dilated = imdilate(roi_mask, SE);
+%     mask = mask | roi_mask_dilated;
+% 
+%     % Method 2: Create a round shape from the centroid
+%     % centroid = mean([x, y]);
+%     % circle_mask = insertShape(zeros(M, N, 'uint8'), 'FilledCircle', [centroid, expand_size*2], 'Color', 'white', 'Opacity', 1);
+%     % mask = mask | circle_mask;
+% end
 % process h5 file
 processed_frames = processFOVFrames(h5_data);
 
@@ -226,7 +295,7 @@ if TEST_clusters
     Fig_vids = figure('Position',[20 20 1800 850], 'Visible','on', 'color', 'k'); % TODO: check position and size of the figure
     unique_cls = unique(clusters_ds, 'stable');
     % write video
-    output = fullfile("D:\test_CAPTURE\328\out_videos\rearing.mp4"); % cls 23, 45, 47
+    output = fullfile(output_base_dir, 'test_rearing.mp4'); % cls 23, 45, 47
  
     writerObj = VideoWriter(fullfile(output), 'MPEG-4');
     writerObj.Quality = 100;
@@ -251,18 +320,45 @@ if TEST_clusters
 end
 
 %% Run outputs
-output_vid_beh = fullfile("D:\test_CAPTURE\328\out_videos\beh.mp4");
-output_vid_FVO = fullfile("D:\test_CAPTURE\328\out_videos\FOV.mp4");
-output_vid_pred = fullfile("D:\test_CAPTURE\328\out_videos\pred.mp4");
-output_vid_clusters = fullfile("D:\test_CAPTURE\328\out_videos\clusters.mp4");
+% Create output directory structure
+output_base_dir = fullfile(GC.temp_root, 'output_videos', animal_to_take, condition);
+if ~exist(output_base_dir, 'dir')
+    mkdir(output_base_dir);
+end
+
+output_vid_beh = fullfile(output_base_dir, 'beh.mp4');
+output_vid_FVO = fullfile(output_base_dir, 'FOV.mp4');
+output_vid_pred = fullfile(output_base_dir, 'pred.mp4');
+output_vid_clusters = fullfile(output_base_dir, 'clusters.mp4');
+
+% Also create outputs for raw miniscope if available
+if ~isempty(raw_miniscope_video)
+    output_vid_raw_miniscope = fullfile(output_base_dir, 'raw_miniscope.mp4');
+end
 
 FR_to_downsample = 5; % 5Hz
 
 % pred.predictions = predictions;
-run_beh_video(beh_movie, frames_to_read, output_vid_beh,pred)
+run_beh_video(beh_movie, frames_to_read, output_vid_beh, pred)
 run_predictions(pred, frames_to_read, output_vid_pred, clusters_ds)
-run_FOV (processed_frames, frames_to_read_FOV, output_vid_FVO, mask)
+run_FOV(processed_frames, frames_to_read_FOV, output_vid_FVO, mask)
 run_cluster_highlights(analysisstruct, frames_to_read, output_vid_clusters, clusters_ds)
+
+% Process raw miniscope video if available
+if ~isempty(raw_miniscope_video)
+    % Calculate frames for raw miniscope video
+    raw_miniscope_length = raw_miniscope_video.NumFrames;
+    FOV_length = size(h5_data, 3);
+    
+    % Map FOV frames to raw miniscope frames
+    frames_to_read_raw = round(frames_to_read_FOV * (raw_miniscope_length / FOV_length));
+    frames_to_read_raw = frames_to_read_raw(frames_to_read_raw <= raw_miniscope_length & frames_to_read_raw > 0);
+    
+    run_raw_miniscope_video(raw_miniscope_video, frames_to_read_raw, output_vid_raw_miniscope, clusters_ds(1:length(frames_to_read_raw)));
+end
+
+fprintf('Video processing completed for %s condition %s\n', animal_to_take, condition);
+fprintf('Output videos saved to: %s\n', output_base_dir);
 
 
 
@@ -437,8 +533,8 @@ function run_predictions(preds, frames, output, cls)
         
         end
         drawnow
-        xlim([1,1280])
-        ylim([1,720])
+        xlim([1,1800])
+        ylim([1,1000])
         ax = gca;
         ax.YDir = "reverse";
         % ax = axes;
@@ -563,8 +659,65 @@ function  run_cluster_highlights(analysisstruct, frames, output, cls)
     
         % ... the rest of the code 
         writeVideo(writerObj,getframe(Fig_vids))
+        
         % drawnow
     
     end
+    close(writerObj);
+    % Close the visualization figure
 
+end
+
+function run_raw_miniscope_video(raw_video, frames, output, cls)
+    global FR_to_downsample
+    writerObj = VideoWriter(fullfile(output), 'MPEG-4');
+    writerObj.Quality = 100;
+    writerObj.FrameRate = FR_to_downsample;
+
+    % Initialize the video writer
+    open(writerObj);
+    
+    % Create the figure for visualization
+    Fig_vids = figure('Position',[20 20 1800 850], 'Visible','off', 'color', 'k');
+    
+    cls_idx = 1;
+    % Iterate through the frames
+    for frameIdx = frames
+        % Extract frame data from raw miniscope video
+        if frameIdx <= raw_video.NumFrames
+            frameData = read(raw_video, frameIdx);
+            
+            % Convert to grayscale if needed
+            if size(frameData, 3) == 3
+                frameData = rgb2gray(frameData);
+            end
+            
+            % Normalize the frame
+            frameData = double(frameData);
+            frameData = (frameData - min(frameData(:))) / (max(frameData(:)) - min(frameData(:)));
+            
+            % Display the frame
+            imagesc(frameData);
+            colormap('gray');
+            clim([0, 1]);
+            axis off;
+            
+            % Add cluster information if available
+            if cls_idx <= length(cls)
+                title(['Raw Miniscope - Cls: ' num2str(cls(cls_idx))], 'Color','w');
+            else
+                title('Raw Miniscope', 'Color','w');
+            end
+            
+            % Save this visualization to the video
+            writeVideo(writerObj, getframe(Fig_vids));
+            cls_idx = cls_idx + 1;
+        end
+    end
+    
+    % Close the video writer
+    close(writerObj);
+    
+    % Close the visualization figure
+    close(Fig_vids);
 end
