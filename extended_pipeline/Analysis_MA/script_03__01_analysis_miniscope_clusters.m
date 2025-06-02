@@ -90,6 +90,13 @@ end
 %% V2
 
 
+% Call the function to analyze and plot the calcium metrics comparison
+analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'max_amplitude', 'H_v_N');
+analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'peaks', 'H_v_N');
+analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'freqs', 'H_v_N');
+%% Not necessary
+
+%% ----------
 global_clusters = [];
 for animal = 1:length(animals_of_interest)
     animal_ID = animals_of_interest{animal};

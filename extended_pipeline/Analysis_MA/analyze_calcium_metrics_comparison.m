@@ -1,12 +1,24 @@
 function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, metric_to_take, comparison)
     % analyze_calcium_metrics_comparison - Analyzes and visualizes calcium imaging metrics
     % 
+    % This function performs comprehensive analysis and visualization of calcium imaging 
+    % metrics comparing two experimental conditions (e.g., Saline vs Formalin, Sham vs Neuropathic).
+    % It generates four types of plots: bar comparison, difference chart, heatmap, and scatter plot.
+    % 
     % Inputs:
     %   data1 - Structure containing control group data (Saline/Sham)
     %   data2 - Structure containing experimental group data (Formalin/Neuropathic)
-    %   animals_of_interest - Cell array of animal IDs
+    %   animals_of_interest - Cell array of animal IDs to include in analysis
     %   metric_to_take - String specifying metric ('max_amplitude', 'peaks', 'freqs')
     %   comparison - String specifying comparison type ('S_v_F' or 'H_v_N')
+    %
+    % The function:
+    %   1. Concatenates data across animals for each cluster
+    %   2. Filters out clusters with insufficient data
+    %   3. Generates four visualization types with appropriate sorting
+    %   4. Exports figures to the configured temporary directory
+    
+    global GC;
     
     % Set group labels based on comparison type
     if strcmp(comparison, 'S_v_F')
@@ -111,6 +123,20 @@ function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, m
 end
 
 function plot_bar_comparison(data1, data2, group1_label, group2_label, metric_to_take)
+    % plot_bar_comparison - Creates side-by-side bar comparison plot
+    %
+    % This function generates a bar chart comparing mean values between two groups
+    % for each cluster. Bars are sorted by group 2 activity (descending order).
+    % Error bars show Standard Error of the Mean (SEM) for each group.
+    % Statistical significance is indicated above each cluster pair.
+    %
+    % Inputs:
+    %   data1, data2 - Structures containing data for each cluster
+    %   group1_label, group2_label - String labels for the two groups
+    %   metric_to_take - String specifying the metric being analyzed
+    
+    global GC;
+    
     Fig_clusters_amplitude = figure('color', 'w', 'Position',[100 100 1500 700]);
     
     % Define plotting constants
@@ -120,8 +146,31 @@ function plot_bar_comparison(data1, data2, group1_label, group2_label, metric_to
     
     clusters = fieldnames(data1);
     
+    % Filter out clusters with NaN values in either condition
+    valid_clusters = {};
+    group2_means_valid = [];
+    
     for i = 1:length(clusters)
         cluster_name = clusters{i};
+        data_group1 = data1.(cluster_name);
+        data_group2 = data2.(cluster_name);
+        
+        mean1 = nanmean(data_group1);
+        mean2 = nanmean(data_group2);
+        
+        % Only include clusters where both conditions have valid (non-NaN) data
+        if ~isnan(mean1) && ~isnan(mean2) && ~isempty(data_group1) && ~isempty(data_group2)
+            valid_clusters{end+1} = cluster_name;
+            group2_means_valid(end+1) = mean2;
+        end
+    end
+    
+    % Sort valid clusters by group 2 means (descending order)
+    [~, sort_idx] = sort(group2_means_valid, 'descend');
+    sorted_clusters = valid_clusters(sort_idx);
+    
+    for i = 1:length(sorted_clusters)
+        cluster_name = sorted_clusters{i};
         
         data_group1 = data1.(cluster_name);
         data_group2 = data2.(cluster_name);
@@ -130,15 +179,14 @@ function plot_bar_comparison(data1, data2, group1_label, group2_label, metric_to
         try
             [h, p, ci, stats] = ttest2(data_group1, data_group2);
         catch
-            p = 0;
+            p = 1;
             stats.tstat = [];
         end
-        
-        % Calculate means and SEMs
+          % Calculate means and SEMs
         mean_1 = nanmean(data_group1);
-        SEM_1 = std(data_group1)/sqrt(length(data_group1));
+        SEM_1 = nanstd(data_group1)/sqrt(length(data_group1));
         mean_2 = nanmean(data_group2);
-        SEM_2 = std(data_group2)/sqrt(length(data_group2));
+        SEM_2 = nanstd(data_group2)/sqrt(length(data_group2));
         
         % Plot bars and error bars
         bar(currentX, mean_1, barWidth, 'b');
@@ -147,15 +195,17 @@ function plot_bar_comparison(data1, data2, group1_label, group2_label, metric_to
         bar(currentX + barWidth, mean_2, barWidth, 'r');
         errorbar(currentX + barWidth, mean_2, SEM_2, 'k', 'LineStyle', 'none');
         
-        % Add significance markers
-        try
-            if p < 0.05 && p > 0.01
-                text(currentX, max(mean_2, mean_1) + max(mean_2, mean_1) * 0.20, '*');
-            elseif p < 0.01 && p > 0.001
-                text(currentX - barWidth, max(mean_2, mean_1) + max(mean_2, mean_1) * 0.20, '**');
-            elseif p < 0.001 && p > 0
-                text(currentX - barWidth, max(mean_2, mean_1) + max(mean_2, mean_1) * 0.20, '***');
-            end
+        % Add significance markers - Fixed positioning
+        maxY = max(mean_1 + SEM_1, mean_2 + SEM_2);
+        textY = maxY + maxY * 0.15;
+        textX = currentX + barWidth/2; % Center between the two bars
+        
+        if p < 0.001
+            text(textX, textY, '***', 'HorizontalAlignment', 'center', 'FontSize', 12);
+        elseif p < 0.01
+            text(textX, textY, '**', 'HorizontalAlignment', 'center', 'FontSize', 12);
+        elseif p < 0.05
+            text(textX, textY, '*', 'HorizontalAlignment', 'center', 'FontSize', 12);
         end
         
         currentX = currentX + barWidth * 2 + gapWidth;
@@ -165,37 +215,82 @@ function plot_bar_comparison(data1, data2, group1_label, group2_label, metric_to
     hG1 = bar(NaN, NaN, 'b');
     hG2 = bar(NaN, NaN, 'r');
     legend([hG1, hG2], {group1_label, group2_label});
-    
-    % Customize plot
+      % Customize plot
     ylabel(['Mean ' metric_to_take]);
-    xlabel('Clusters');
-    title(['Mean ' metric_to_take ' of ROIs per Cluster for ' group1_label ' and ' group2_label]);
-    set(gca, 'XTick', 1.5:barWidth*2+gapWidth:length(clusters)*(barWidth*2+gapWidth));
-    set(gca, 'XTickLabel', clusters, 'TickLabelInterpreter', 'none');
+    xlabel(['Clusters (sorted by ' group2_label ' activity)']);
+    title(['Mean ' metric_to_take ' of ROIs per Cluster for ' group1_label ' and ' group2_label ' (sorted by ' group2_label ')']);
+    set(gca, 'XTick', 1.5:barWidth*2+gapWidth:length(sorted_clusters)*(barWidth*2+gapWidth));
+    set(gca, 'XTickLabel', 1:length(sorted_clusters)); % Use numbers instead of cluster names
     box off;
     set(gca, 'TickDir', 'out');
+    
+    % Export figure
+    if ~isempty(GC) && isfield(GC, 'temp_root')
+        export_folder = GC.temp_root;
+        fig_name = ['BarComparison_' metric_to_take '_' group1_label '_vs_' group2_label];
+        exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    end
 end
 
 function plot_difference_chart(data1, data2, group1_label, group2_label, metric_to_take)
+    % plot_difference_chart - Creates difference chart showing group2 - group1
+    %
+    % This function generates a bar chart showing the difference between group means
+    % for each cluster. Bars are sorted by difference magnitude (descending order).
+    % No error bars are shown since differences are calculated values, not measurements.
+    % Color coding indicates statistical significance levels.
+    %
+    % Inputs:
+    %   data1, data2 - Structures containing data for each cluster
+    %   group1_label, group2_label - String labels for the two groups
+    %   metric_to_take - String specifying the metric being analyzed
+    
+    global GC;
+    
     Fig_clusters_amplitude = figure('color', 'w', 'Position',[100 100 1500 700]);
     
     barWidth = 0.85;
     clusters = fieldnames(data1);
     
-    % Preallocate arrays
-    differences = zeros(1, length(clusters));
-    errors = zeros(1, length(clusters));
-    p_values_array = zeros(1, length(clusters));
+    % Filter out clusters with NaN values in either condition and calculate differences
+    valid_clusters = {};
+    differences_for_sorting = [];
     
-    % Calculate differences and statistics
     for i = 1:length(clusters)
         cluster_name = clusters{i};
-        
         data_group1 = data1.(cluster_name);
         data_group2 = data2.(cluster_name);
         
+        mean1 = nanmean(data_group1);
+        mean2 = nanmean(data_group2);
+        difference = mean2 - mean1;
+        
+        % Only include clusters where both conditions have valid (non-NaN) data
+        if ~isnan(mean1) && ~isnan(mean2) && ~isempty(data_group1) && ~isempty(data_group2)
+            valid_clusters{end+1} = cluster_name;
+            differences_for_sorting(end+1) = difference;
+        end
+    end
+    
+    % Sort valid clusters by difference (descending order - largest positive differences first)
+    [differences_data, sort_idx] = sort(differences_for_sorting, 'descend');
+    sorted_clusters = valid_clusters(sort_idx);
+    
+    % Preallocate arrays
+    differences = zeros(1, length(sorted_clusters));
+    errors = zeros(1, length(sorted_clusters));
+    p_values_array = zeros(1, length(sorted_clusters));
+    
+    % Calculate differences and statistics for sorted clusters
+    for i = 1:length(sorted_clusters)
+        cluster_name = sorted_clusters{i};
+        
+        data_group1 = data1.(cluster_name);
+        data_group2 = data2.(cluster_name); 
         differences(i) = nanmean(data_group2) - nanmean(data_group1);
-        errors(i) = sqrt((std(data_group2)^2/length(data_group2)) + (std(data_group1)^2/length(data_group1)));
+        % Calculate SEM for the difference
+        % differences_data = nanmean(data_group2) - nanmean(data_group1);
+        % errors(i) = nanstd(differences_data)/sqrt(length(differences_data));
         
         try
             [~, p] = ttest2(data_group1, data_group2);
@@ -206,7 +301,7 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
     end
     
     % Create color coding based on p-values
-    colors = zeros(length(clusters), 3);
+    colors = zeros(length(sorted_clusters), 3);
     colors(p_values_array < 0.05 & p_values_array >= 0.01, :) = repmat([0.8 0.4 0], sum(p_values_array < 0.05 & p_values_array >= 0.01), 1);
     colors(p_values_array < 0.01 & p_values_array >= 0.001, :) = repmat([0.9 0.2 0], sum(p_values_array < 0.01 & p_values_array >= 0.001), 1);
     colors(p_values_array < 0.001, :) = repmat([1 0 0], sum(p_values_array < 0.001), 1);
@@ -218,15 +313,13 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
     b.CData = colors;
     
     hold on;
-    errorbar(1:length(clusters), differences, errors, 'k.', 'LineStyle', 'none');
-    yline(0, 'k--', 'Alpha', 0.3);
-    
-    % Customize plot
+    % errorbar(1:length(sorted_clusters), differences, errors, 'k.', 'LineStyle', 'none');
+    yline(0, 'k--', 'Alpha', 0.3);    % Customize plot
     ylabel(['Difference in Mean ' metric_to_take ' (' group2_label ' - ' group1_label ')']);
-    xlabel('Clusters');
-    title(['Difference in ' metric_to_take ' between ' group2_label ' and ' group1_label ' Conditions']);
-    set(gca, 'XTick', 1:length(clusters));
-    set(gca, 'XTickLabel', clusters, 'TickLabelInterpreter', 'none');
+    xlabel('Clusters (sorted by difference)');
+    title(['Difference in ' metric_to_take ' between ' group2_label ' and ' group1_label ' Conditions (sorted by difference)']);
+    set(gca, 'XTick', 1:length(sorted_clusters));
+    set(gca, 'XTickLabel', []); % Remove x-axis labels since cluster ordering loses meaning
     box off;
     set(gca, 'TickDir', 'out');
     
@@ -238,20 +331,65 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
         patch([0 0], [0 0], [1 0 0], 'DisplayName', 'p < 0.001')
     ];
     legend(legend_elements, 'Location', 'northeast');
+    
+    % Export figure
+    if ~isempty(GC) && isfield(GC, 'temp_root')
+        export_folder = GC.temp_root;
+        fig_name = ['DifferenceChart_' metric_to_take '_' group1_label '_vs_' group2_label];
+        exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    end
 end
 
 function plot_heatmap(data1, data2, group1_label, group2_label, metric_to_take)
+    % plot_heatmap - Creates heatmap visualization of group means
+    %
+    % This function generates a heatmap showing mean values for both groups
+    % across all clusters. Rows represent conditions and columns represent clusters.
+    % Clusters are sorted by group 2 activity (descending order) and labeled with
+    % numbers instead of cluster IDs. Statistical significance is indicated with
+    % asterisks above each cluster column.
+    %
+    % Inputs:
+    %   data1, data2 - Structures containing data for each cluster
+    %   group1_label, group2_label - String labels for the two groups
+    %   metric_to_take - String specifying the metric being analyzed
+    
+    global GC;
+    
     Fig_clusters_amplitude = figure('color', 'w', 'Position',[100 100 1500 700]);
     
     clusters = fieldnames(data1);
-    num_clusters = length(clusters);
     
-    % Calculate means and p-values
+    % Filter out clusters with NaN values in either condition
+    valid_clusters = {};
+    group2_means_valid = [];
+    
+    for i = 1:length(clusters)
+        cluster_name = clusters{i};
+        data_group1 = data1.(cluster_name);
+        data_group2 = data2.(cluster_name);
+        
+        mean1 = nanmean(data_group1);
+        mean2 = nanmean(data_group2);
+        
+        % Only include clusters where both conditions have valid (non-NaN) data
+        if ~isnan(mean1) && ~isnan(mean2) && ~isempty(data_group1) && ~isempty(data_group2)
+            valid_clusters{end+1} = cluster_name;
+            group2_means_valid(end+1) = mean2;
+        end
+    end
+    
+    % Sort valid clusters by group 2 means (descending order)
+    [~, sort_idx] = sort(group2_means_valid, 'descend');
+    sorted_clusters = valid_clusters(sort_idx);
+    num_clusters = length(sorted_clusters);
+    
+    % Calculate means and p-values for sorted clusters
     means_matrix = zeros(2, num_clusters);
     p_values_array = zeros(1, num_clusters);
     
     for i = 1:num_clusters
-        cluster_name = clusters{i};
+        cluster_name = sorted_clusters{i};
         
         data_group1 = data1.(cluster_name);
         data_group2 = data2.(cluster_name);
@@ -276,37 +414,80 @@ function plot_heatmap(data1, data2, group1_label, group2_label, metric_to_take)
     hold on;
     for i = 1:num_clusters
         if p_values_array(i) < 0.001
-            text(i, 1.5, '***', 'HorizontalAlignment', 'center', 'Color', 'k');
+            text(i, 1.5, '***', 'HorizontalAlignment', 'center', 'Color', 'k', 'FontSize', 12);
         elseif p_values_array(i) < 0.01
-            text(i, 1.5, '**', 'HorizontalAlignment', 'center', 'Color', 'k');
+            text(i, 1.5, '**', 'HorizontalAlignment', 'center', 'Color', 'k', 'FontSize', 12);
         elseif p_values_array(i) < 0.05
-            text(i, 1.5, '*', 'HorizontalAlignment', 'center', 'Color', 'k');
+            text(i, 1.5, '*', 'HorizontalAlignment', 'center', 'Color', 'k', 'FontSize', 12);
         end
     end
-    
-    % Customize plot
+      % Customize plot
     ylabel('Condition');
-    xlabel('Clusters');
-    title(['Mean ' metric_to_take ' Heatmap of ROIs per Cluster']);
+    xlabel(['Clusters (sorted by ' group2_label ' activity)']);
+    title(['Mean ' metric_to_take ' Heatmap of ROIs per Cluster (sorted by ' group2_label ')']);
     set(gca, 'YTick', 1:2);
     set(gca, 'YTickLabel', {group1_label, group2_label});
     set(gca, 'XTick', 1:num_clusters);
-    set(gca, 'XTickLabel', clusters, 'TickLabelInterpreter', 'none');
+    set(gca, 'XTickLabel', 1:num_clusters); % Use numbers instead of cluster names
+    
+    % Export figure
+    if ~isempty(GC) && isfield(GC, 'temp_root')
+        export_folder = GC.temp_root;
+        fig_name = ['Heatmap_' metric_to_take '_' group1_label '_vs_' group2_label];
+        exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    end
 end
 
 function plot_scatter_comparison(data1, data2, group1_label, group2_label, metric_to_take)
+    % plot_scatter_comparison - Creates scatter plot comparing group means
+    %
+    % This function generates a scatter plot showing mean values for both groups
+    % with connecting lines for each cluster. Clusters are sorted by group 2 activity
+    % (descending order) and labeled with numbers instead of cluster IDs.
+    % Line colors indicate statistical significance levels between groups.
+    %
+    % Inputs:
+    %   data1, data2 - Structures containing data for each cluster
+    %   group1_label, group2_label - String labels for the two groups
+    %   metric_to_take - String specifying the metric being analyzed
+    
+    global GC;
+    
     Fig_clusters_amplitude = figure('color', 'w', 'Position',[100 100 1500 700]);
     
     clusters = fieldnames(data1);
-    num_clusters = length(clusters);
     
-    % Calculate means and p-values
+    % Filter out clusters with NaN values in either condition
+    valid_clusters = {};
+    group2_means_valid = [];
+    
+    for i = 1:length(clusters)
+        cluster_name = clusters{i};
+        data_group1 = data1.(cluster_name);
+        data_group2 = data2.(cluster_name);
+        
+        mean1 = nanmean(data_group1);
+        mean2 = nanmean(data_group2);
+        
+        % Only include clusters where both conditions have valid (non-NaN) data
+        if ~isnan(mean1) && ~isnan(mean2) && ~isempty(data_group1) && ~isempty(data_group2)
+            valid_clusters{end+1} = cluster_name;
+            group2_means_valid(end+1) = mean2;
+        end
+    end
+    
+    % Sort valid clusters by group 2 means (descending order)
+    [~, sort_idx] = sort(group2_means_valid, 'descend');
+    sorted_clusters = valid_clusters(sort_idx);
+    num_clusters = length(sorted_clusters);
+    
+    % Calculate means and p-values for sorted clusters
     means_1 = zeros(1, num_clusters);
     means_2 = zeros(1, num_clusters);
     p_values_array = zeros(1, num_clusters);
     
     for i = 1:num_clusters
-        cluster_name = clusters{i};
+        cluster_name = sorted_clusters{i};
         
         data_group1 = data1.(cluster_name);
         data_group2 = data2.(cluster_name);
@@ -331,7 +512,7 @@ function plot_scatter_comparison(data1, data2, group1_label, group2_label, metri
     
     % Plot connecting lines and points
     for i = 1:num_clusters
-        line([means_1(i) means_2(i)], [i i], 'Color', colors(i,:));
+        line([means_1(i) means_2(i)], [i i], 'Color', colors(i,:), 'LineWidth', 2);
     end
     
     hold on;
@@ -339,15 +520,14 @@ function plot_scatter_comparison(data1, data2, group1_label, group2_label, metri
     scatter(means_2, 1:num_clusters, 50, 'r', 'filled');
     
     % Customize plot
-    ylabel('Clusters');
+    ylabel(['Clusters (sorted by ' group2_label ' activity)']);
     xlabel(['Mean ' metric_to_take]);
-    title(['Comparison of Mean ' metric_to_take ' between Conditions']);
+    title(['Comparison of Mean ' metric_to_take ' between Conditions (sorted by ' group2_label ')']);
     set(gca, 'YTick', 1:num_clusters);
-    set(gca, 'YTickLabel', clusters, 'TickLabelInterpreter', 'none');
+    set(gca, 'YTickLabel', 1:num_clusters); % Use numbers instead of cluster names
     box off;
     set(gca, 'TickDir', 'out');
-    
-    % Add legend
+      % Add legend
     legend_elements = [
         scatter(NaN, NaN, 50, 'b', 'filled', 'DisplayName', group1_label);
         scatter(NaN, NaN, 50, 'r', 'filled', 'DisplayName', group2_label);
@@ -357,4 +537,11 @@ function plot_scatter_comparison(data1, data2, group1_label, group2_label, metri
         line([NaN NaN], [NaN NaN], 'Color', [1 0 0], 'DisplayName', 'p < 0.001')
     ];
     legend(legend_elements, 'Location', 'northeast');
+    
+    % Export figure
+    if ~isempty(GC) && isfield(GC, 'temp_root')
+        export_folder = GC.temp_root;
+        fig_name = ['ScatterComparison_' metric_to_take '_' group1_label '_vs_' group2_label];
+        exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    end
 end

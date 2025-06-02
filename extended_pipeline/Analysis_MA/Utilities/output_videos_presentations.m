@@ -464,88 +464,94 @@ function run_predictions(preds, frames, output, cls)
     open(writerObj);
     sklton = fullfile("H:\Cam_cal_and_label3D_Nevian\Label3D\skeletons\mouse22.mat");
     skeleton = load(sklton);
-    
     names = fieldnames(preds.predictions);
     names(ismember(names, 'sampleID')) = [];
+    % Remove Tail_end_ from names
+    names(ismember(names, 'Tail_end_')) = [];
     handles_here = cell(1,numel(names));
     n_frames = length(frames);
     cls_idx = 1;
-    for iframe = frames% hasFrame(vid) && hasFrame(ani)
-        % iid = iid +1;
-        % plot real
-        clf
-            
-        ind_to_plot = iframe;
-        pts_this_frame = NaN(numel(names),3);
-        %     title(ax, str_title, 'Color','w')
-        for jj = 1:numel(names)
-            % don't plot markers that drop out
-            % if ~isnan(sum(preds.predictions.(names{jj})(ind_to_plot,:),2))
-            if (~sum(preds.predictions.(names{jj})(ind_to_plot,:),2) == 0)
-                xx = squeeze(preds.predictions.(names{jj})(ind_to_plot,1));
-                yy = squeeze(preds.predictions.(names{jj})(ind_to_plot,2));
-                zz = squeeze(preds.predictions.(names{jj})(ind_to_plot,3));
-                % handles_here{jj} = line(xx,yy,zz,'Marker','o','Color',skeleton.color(jj,:),'MarkerFaceColor',skeleton.color(jj,:),'MarkerSize',5);
-                pts_this_frame(jj,:) = [xx,yy,zz];            
-                hold on
-                marker_plot(jj) = 1;
-            else
-                marker_plot(jj) = 0;
-            end
 
-            % end
+    % Create mapping from original indices to new indices (excluding Tail_end_)
+    all_names = fieldnames(preds.predictions);
+    all_names(ismember(all_names, 'sampleID')) = [];
+    name_to_idx = containers.Map(all_names, 1:length(all_names));
+    tail_end_idx = name_to_idx('Tail_end_');
+
+    % Filter out links that involve Tail_end_ (index 8)
+    links = skeleton.joints_idx;
+    valid_links = ~(links(:,1) == tail_end_idx | links(:,2) == tail_end_idx);
+    links = links(valid_links, :);
+
+    % Adjust link indices to account for removed Tail_end_
+    links(links > tail_end_idx) = links(links > tail_end_idx) - 1;
+
+    colors = skeleton.color(valid_links, :);
+    n_links = length(links);
+
+    for iframe = frames
+    clf
+        
+    ind_to_plot = iframe;
+    pts_this_frame = NaN(numel(names),3);
+    
+    for jj = 1:numel(names)
+        if (~sum(preds.predictions.(names{jj})(ind_to_plot,:),2) == 0)
+            xx = squeeze(preds.predictions.(names{jj})(ind_to_plot,1));
+            yy = squeeze(preds.predictions.(names{jj})(ind_to_plot,2));
+            zz = squeeze(preds.predictions.(names{jj})(ind_to_plot,3));
+            pts_this_frame(jj,:) = [xx,yy,zz];            
+            hold on
+            marker_plot(jj) = 1;
+        else
+            marker_plot(jj) = 0;
         end
+    end
 
-        pts = pts_this_frame;
+    pts = pts_this_frame;
+    projPts = [pts, ones(size(pts, 1), 1)] * M;
+    projPts(:, 1:2) = projPts(:, 1:2) ./ projPts(:, 3);
+    scatter(projPts(:,1), projPts(:,2), 'ro', 'filled', 'Marker','o')
+    hold on
+    
+    %% plot the links between markers
+    for mm = 1:(n_links)
+        
+        xx = [squeeze(preds.predictions.(names{links(mm,1)})(ind_to_plot,1)) ...
+            squeeze(preds.predictions.(names{links(mm,2)})(ind_to_plot,1)) ];
+        yy = [squeeze(preds.predictions.(names{links(mm,1)})(ind_to_plot,2)) ...
+            squeeze(preds.predictions.(names{links(mm,2)})(ind_to_plot,2)) ];
+        zz = [squeeze(preds.predictions.(names{links(mm,1)})(ind_to_plot,3)) ...
+            squeeze(preds.predictions.(names{links(mm,2)})(ind_to_plot,3)) ];
+
+        % x
+        pts = [xx(1), yy(1), zz(1)];      
+
         projPts = [pts, ones(size(pts, 1), 1)] * M;
         projPts(:, 1:2) = projPts(:, 1:2) ./ projPts(:, 3);
-        scatter(projPts(:,1), projPts(:,2), 'ro', 'filled', 'Marker','o')
-        hold on
-        %% plot the links between markers
-        links = skeleton.joints_idx;
-        colors = skeleton.color;
-        n_links = length(links);
-        for mm = 1:(n_links)
-           
-            xx = [squeeze(preds.predictions.(names{links(mm,1)})(ind_to_plot,1)) ...
-                squeeze(preds.predictions.(names{links(mm,2)})(ind_to_plot,1)) ];
-            yy = [squeeze(preds.predictions.(names{links(mm,1)})(ind_to_plot,2)) ...
-                squeeze(preds.predictions.(names{links(mm,2)})(ind_to_plot,2)) ];
-            zz = [squeeze(preds.predictions.(names{links(mm,1)})(ind_to_plot,3)) ...
-                squeeze(preds.predictions.(names{links(mm,2)})(ind_to_plot,3)) ];
 
-            % x
-            pts = [xx(1), yy(1), zz(1)];      
-
-            projPts = [pts, ones(size(pts, 1), 1)] * M;
-            projPts(:, 1:2) = projPts(:, 1:2) ./ projPts(:, 3);
-
-            pts2  =[xx(2), yy(2), zz(2)];
-            projPts2 = [pts2, ones(size(pts2, 1), 1)] * M;
-            projPts2(:, 1:2) = projPts2(:, 1:2) ./ projPts2(:, 3);
-            
-            xx = [projPts(1), projPts2(1)];
-            yy = [projPts(2), projPts2(2)];
-            %zz = [projPts(3), projPts2(3)];
-            this_color = colors(mm, 1:3);
-            line(xx,yy,'Color',this_color,'LineWidth',1);
-            
+        pts2  =[xx(2), yy(2), zz(2)];
+        projPts2 = [pts2, ones(size(pts2, 1), 1)] * M;
+        projPts2(:, 1:2) = projPts2(:, 1:2) ./ projPts2(:, 3);
         
-        end
-        drawnow
-        xlim([1,1800])
-        ylim([1,1000])
-        ax = gca;
-        ax.YDir = "reverse";
-        % ax = axes;
-        ax.Color = [0, 0, 0];
-        axis off
-        % this_frame_idx = frames(iframe);
-        title(['Cls - ', num2str(cls(cls_idx))], 'Color','w')
-        hold off
-        writeVideo(writerObj,getframe(Fig_vids))
-        cla
-        cls_idx = cls_idx + 1;
+        xx = [projPts(1), projPts2(1)];
+        yy = [projPts(2), projPts2(2)];
+        this_color = colors(mm, 1:3);
+        line(xx,yy,'Color',this_color,'LineWidth',1);
+    end
+    
+    drawnow
+    xlim([1,1800])
+    ylim([1,1000])
+    ax = gca;
+    ax.YDir = "reverse";
+    ax.Color = [0, 0, 0];
+    axis off
+    title(['Cls - ', num2str(cls(cls_idx))], 'Color','w')
+    hold off
+    writeVideo(writerObj,getframe(Fig_vids))
+    cla
+    cls_idx = cls_idx + 1;
     end
     close(writerObj);
     
