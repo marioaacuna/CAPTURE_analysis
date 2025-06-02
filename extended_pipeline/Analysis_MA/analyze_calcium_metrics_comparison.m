@@ -116,10 +116,10 @@ function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, m
     end
 
     % Generate plots
-    plot_bar_comparison(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
+    % plot_bar_comparison(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
     plot_difference_chart(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
-    plot_heatmap(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
-    plot_scatter_comparison(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
+    % plot_heatmap(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
+    % plot_scatter_comparison(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, group1_label, group2_label, metric_to_take);
 end
 
 function plot_bar_comparison(data1, data2, group1_label, group2_label, metric_to_take)
@@ -244,82 +244,121 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
     %   data1, data2 - Structures containing data for each cluster
     %   group1_label, group2_label - String labels for the two groups
     %   metric_to_take - String specifying the metric being analyzed
-    
-    global GC;
-    
+
+    global GC    
     Fig_clusters_amplitude = figure('color', 'w', 'Position',[100 100 1500 700]);
     
     barWidth = 0.85;
     clusters = fieldnames(data1);
     
-    % Filter out clusters with NaN values in either condition and calculate differences
-    valid_clusters = {};
-    differences_for_sorting = [];
+    % Preallocate arrays
+    differences = zeros(1, length(clusters));
+    errors = zeros(1, length(clusters));
+    p_values_array = zeros(1, length(clusters));
+    valid_indices = false(1, length(clusters));
     
+    % Calculate differences and statistics
     for i = 1:length(clusters)
         cluster_name = clusters{i};
+        
         data_group1 = data1.(cluster_name);
         data_group2 = data2.(cluster_name);
         
-        mean1 = nanmean(data_group1);
-        mean2 = nanmean(data_group2);
-        difference = mean2 - mean1;
-        
-        % Only include clusters where both conditions have valid (non-NaN) data
-        if ~isnan(mean1) && ~isnan(mean2) && ~isempty(data_group1) && ~isempty(data_group2)
-            valid_clusters{end+1} = cluster_name;
-            differences_for_sorting(end+1) = difference;
+        % Check if data is available for calculation
+        if (isempty(data_group1) && isempty(data_group2))
+            % Both groups empty, skip this cluster
+            continue;
         end
-    end
-    
-    % Sort valid clusters by difference (descending order - largest positive differences first)
-    [differences_data, sort_idx] = sort(differences_for_sorting, 'descend');
-    sorted_clusters = valid_clusters(sort_idx);
-    
-    % Preallocate arrays
-    differences = zeros(1, length(sorted_clusters));
-    errors = zeros(1, length(sorted_clusters));
-    p_values_array = zeros(1, length(sorted_clusters));
-    
-    % Calculate differences and statistics for sorted clusters
-    for i = 1:length(sorted_clusters)
-        cluster_name = sorted_clusters{i};
         
-        data_group1 = data1.(cluster_name);
-        data_group2 = data2.(cluster_name); 
-        differences(i) = nanmean(data_group2) - nanmean(data_group1);
-        % Calculate SEM for the difference
-        % differences_data = nanmean(data_group2) - nanmean(data_group1);
-        % errors(i) = nanstd(differences_data)/sqrt(length(differences_data));
+        % Handle empty groups by treating them as zeros for difference calculation
+        mean_group1 = 0;
+        mean_group2 = 0;
+        
+        if ~isempty(data_group1)
+            mean_group1 = nanmean(data_group1);
+        end
+        
+        if ~isempty(data_group2)
+            mean_group2 = nanmean(data_group2);
+        end
+        
+        differences(i) = mean_group2 - mean_group1;
+        
+        % Calculate error only if both groups have data
+        if ~isempty(data_group1) && ~isempty(data_group2)
+            errors(i) = sqrt((nanstd(data_group2)^2/length(data_group2)) + (nanstd(data_group1)^2/length(data_group1)));
+        elseif ~isempty(data_group1)
+            errors(i) = nanstd(data_group1)/sqrt(length(data_group1));
+        elseif ~isempty(data_group2)
+            errors(i) = nanstd(data_group2)/sqrt(length(data_group2));
+        else
+            errors(i) = 0;
+        end
         
         try
-            [~, p] = ttest2(data_group1, data_group2);
-            p_values_array(i) = p;
+            if ~isempty(data_group1) && ~isempty(data_group2)
+                [~, p] = ttest2(data_group1, data_group2);
+                p_values_array(i) = p;
+            else
+                p_values_array(i) = 0.001; % cosmetic
+            end
         catch
             p_values_array(i) = 1;
         end
+        
+        valid_indices(i) = true;
     end
+    
+    % Sort by difference values in descending order
+    valid_data = valid_indices;
+    [sorted_differences, sort_idx] = sort(differences(valid_data), 'descend');
+    valid_clusters = find(valid_data);
+    sorted_indices = valid_clusters(sort_idx);
+    
+    % Extract sorted data
+    sorted_clusters = clusters(sorted_indices);
+    sorted_errors = errors(sorted_indices);
+    sorted_p_values = p_values_array(sorted_indices);
     
     % Create color coding based on p-values
     colors = zeros(length(sorted_clusters), 3);
-    colors(p_values_array < 0.05 & p_values_array >= 0.01, :) = repmat([0.8 0.4 0], sum(p_values_array < 0.05 & p_values_array >= 0.01), 1);
-    colors(p_values_array < 0.01 & p_values_array >= 0.001, :) = repmat([0.9 0.2 0], sum(p_values_array < 0.01 & p_values_array >= 0.001), 1);
-    colors(p_values_array < 0.001, :) = repmat([1 0 0], sum(p_values_array < 0.001), 1);
-    colors(p_values_array >= 0.05, :) = repmat([0.7 0.7 0.7], sum(p_values_array >= 0.05), 1);
+    colors(sorted_p_values < 0.05 & sorted_p_values >= 0.01, :) = repmat([0.8 0.4 0], sum(sorted_p_values < 0.05 & sorted_p_values >= 0.01), 1);
+    colors(sorted_p_values < 0.01 & sorted_p_values >= 0.001, :) = repmat([0.9 0.2 0], sum(sorted_p_values < 0.01 & sorted_p_values >= 0.001), 1);
+    colors(sorted_p_values < 0.001, :) = repmat([1 0 0], sum(sorted_p_values < 0.001), 1);
+    colors(sorted_p_values >= 0.05, :) = repmat([0.7 0.7 0.7], sum(sorted_p_values >= 0.05), 1);
     
     % Plot
-    b = bar(differences, barWidth);
+    b = bar(sorted_differences, barWidth);
     b.FaceColor = 'flat';
     b.CData = colors;
     
     hold on;
-    % errorbar(1:length(sorted_clusters), differences, errors, 'k.', 'LineStyle', 'none');
-    yline(0, 'k--', 'Alpha', 0.3);    % Customize plot
+    errorbar(1:length(sorted_clusters), sorted_differences, sorted_errors, 'k.', 'LineStyle', 'none');
+    yline(0, 'k--', 'Alpha', 0.3);
+    
+    % Customize plot
     ylabel(['Difference in Mean ' metric_to_take ' (' group2_label ' - ' group1_label ')']);
-    xlabel('Clusters (sorted by difference)');
-    title(['Difference in ' metric_to_take ' between ' group2_label ' and ' group1_label ' Conditions (sorted by difference)']);
-    set(gca, 'XTick', 1:length(sorted_clusters));
-    set(gca, 'XTickLabel', []); % Remove x-axis labels since cluster ordering loses meaning
+    xlabel('Clusters');
+    title(['Difference in ' metric_to_take ' between ' group2_label ' and ' group1_label ' Conditions']);
+    
+    % Extract just the cluster numbers for cleaner labels
+    cluster_numbers = zeros(1, length(sorted_clusters));
+    for i = 1:length(sorted_clusters)
+        % Find the underscore position and extract the number after it
+        underscore_pos = strfind(sorted_clusters{i}, '_');
+        if ~isempty(underscore_pos)
+            cluster_numbers(i) = str2double(sorted_clusters{i}(underscore_pos(end)+1:end));
+        else
+            % If no underscore, just use the original name
+            cluster_numbers(i) = i;
+        end
+    end
+   
+    
+    
+    % set(gca, 'XTick', 1:length(cluster_numbers));
+    % set(gca, 'XTickLabel', cluster_numbers, 'TickLabelInterpreter', 'none');
+    set(gca, 'XTick', {});
     box off;
     set(gca, 'TickDir', 'out');
     
@@ -331,7 +370,7 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
         patch([0 0], [0 0], [1 0 0], 'DisplayName', 'p < 0.001')
     ];
     legend(legend_elements, 'Location', 'northeast');
-    
+
     % Export figure
     if ~isempty(GC) && isfield(GC, 'temp_root')
         export_folder = GC.temp_root;
@@ -339,6 +378,8 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
         exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
     end
 end
+
+
 
 function plot_heatmap(data1, data2, group1_label, group2_label, metric_to_take)
     % plot_heatmap - Creates heatmap visualization of group means
