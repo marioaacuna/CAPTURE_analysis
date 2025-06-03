@@ -64,7 +64,7 @@ grid_width = max_width * 2;
 grid_height = max_height * 2;
 
 % Determine the minimum number of frames across all videos
-min_frames = 5000; % inf
+min_frames = 2000; % inf
 for i = 1:length(video_readers)
     if ~isempty(video_readers{i})
         min_frames = min(min_frames, video_readers{i}.NumFrames);
