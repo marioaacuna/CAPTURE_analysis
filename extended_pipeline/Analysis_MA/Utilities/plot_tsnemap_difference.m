@@ -454,9 +454,245 @@ if do_export
     logger(sprintf('Saved summary table: %s', summary_filename), 'INFO');
 end
 
+%% Analyze cluster proportions with 80% threshold
+logger('Analyzing cluster proportions with 80% threshold', 'INFO');
+
+% Define threshold for significant cluster changes
+threshold = 0.8; % 80% threshold
+
+% Initialize arrays for proportion analysis
+proportion_analysis = table();
+comparison_names_prop = {};
+total_clusters_prop = [];
+num_gained_80 = [];
+num_lost_80 = [];
+proportion_gained = [];
+proportion_lost = [];
+proportion_unchanged = [];
+
+comp_idx = 1;
+field_names = fieldnames(diff_struct);
+for i = 1:length(field_names)
+    comparison_name = field_names{i};
+    data = diff_struct.(comparison_name);
+    
+    % Count clusters with > 80% increase (gained)
+    gained_80_clusters = sum(data.cluster_difference > threshold);
+    
+    % Count clusters with < -80% decrease (lost)
+    lost_80_clusters = sum(data.cluster_difference < -threshold);
+    
+    % Count unchanged clusters (between -80% and +80%)
+    unchanged_clusters = sum(abs(data.cluster_difference) <= threshold);
+    
+    % Calculate proportions
+    total_clusters = length(data.cluster_ids);
+    prop_gained = gained_80_clusters / total_clusters;
+    prop_lost = lost_80_clusters / total_clusters;
+    prop_unchanged = unchanged_clusters / total_clusters;
+    
+    % Store results
+    comparison_names_prop{comp_idx} = strrep(comparison_name, '_', ' vs ');
+    total_clusters_prop(comp_idx) = total_clusters;
+    num_gained_80(comp_idx) = gained_80_clusters;
+    num_lost_80(comp_idx) = lost_80_clusters;
+    proportion_gained(comp_idx) = prop_gained;
+    proportion_lost(comp_idx) = prop_lost;
+    proportion_unchanged(comp_idx) = prop_unchanged;
+    
+    % Store in diff_struct for later use
+    diff_struct.(comparison_name).gained_80_clusters = gained_80_clusters;
+    diff_struct.(comparison_name).lost_80_clusters = lost_80_clusters;
+    diff_struct.(comparison_name).unchanged_clusters = unchanged_clusters;
+    diff_struct.(comparison_name).proportion_gained = prop_gained;
+    diff_struct.(comparison_name).proportion_lost = prop_lost;
+    diff_struct.(comparison_name).proportion_unchanged = prop_unchanged;
+    diff_struct.(comparison_name).threshold_used = threshold;
+    
+    logger(sprintf('For %s: %d gained (%.1f%%), %d lost (%.1f%%), %d unchanged (%.1f%%)', ...
+        comparison_names_prop{comp_idx}, gained_80_clusters, prop_gained*100, ...
+        lost_80_clusters, prop_lost*100, unchanged_clusters, prop_unchanged*100), 'INFO');
+    
+    comp_idx = comp_idx + 1;
+end
+
+% Create proportion analysis table
+proportion_analysis.Comparison = comparison_names_prop';
+proportion_analysis.Total_Clusters = total_clusters_prop';
+proportion_analysis.Gained_80pct_Count = num_gained_80';
+proportion_analysis.Lost_80pct_Count = num_lost_80';
+proportion_analysis.Proportion_Gained = proportion_gained';
+proportion_analysis.Proportion_Lost = proportion_lost';
+proportion_analysis.Proportion_Unchanged = proportion_unchanged';
+
+% Display proportion analysis
+disp('=== Cluster Proportion Analysis (80% Threshold) ===');
+disp(proportion_analysis);
+
+%% Create pie charts for cluster proportions
+function create_cluster_proportion_pie_charts(diff_struct, threshold, visualize, export_folder, do_export)
+    field_names = fieldnames(diff_struct);
+    
+    for i = 1:length(field_names)
+        comparison_name = field_names{i};
+        data = diff_struct.(comparison_name);
+        
+        % Create figure for pie chart
+        fig = figure('Visible', visualize);
+        set(fig, 'Position', [100, 100, 800, 600]);
+        set(fig, 'Color', 'w');
+        
+        % Prepare data for pie chart
+        gained_count = data.gained_80_clusters;
+        lost_count = data.lost_80_clusters;
+        unchanged_count = data.unchanged_clusters;
+        
+        % Only include non-zero categories
+        pie_data = [];
+        pie_labels = {};
+        pie_colors = [];
+        
+        if gained_count > 0
+            pie_data = [pie_data, gained_count];
+            pie_labels{end+1} = sprintf('Gained (>%d%%) - %d clusters', threshold*100, gained_count);
+            pie_colors = [pie_colors; 1, 0, 0]; % Red
+        end
+        
+        if lost_count > 0
+            pie_data = [pie_data, lost_count];
+            pie_labels{end+1} = sprintf('Lost (<%d%%) - %d clusters', -threshold*100, lost_count);
+            pie_colors = [pie_colors; 0, 0, 1]; % Blue
+        end
+        
+        if unchanged_count > 0
+            pie_data = [pie_data, unchanged_count];
+            pie_labels{end+1} = sprintf('Unchanged (±%d%%) - %d clusters', threshold*100, unchanged_count);
+            pie_colors = [pie_colors; 0.7, 0.7, 0.7]; % Gray
+        end
+        
+        % Create pie chart
+        if ~isempty(pie_data)
+            pie_handle = pie(pie_data);
+            
+            % Customize colors
+            for j = 1:2:length(pie_handle)
+                color_idx = ceil(j/2);
+                if color_idx <= size(pie_colors, 1)
+                    set(pie_handle(j), 'FaceColor', pie_colors(color_idx, :));
+                end
+            end
+            
+            % Add legend
+            legend(pie_labels, 'Location', 'eastoutside', 'FontSize', 10);
+            
+            % Add title with statistics
+            title_str = sprintf('Cluster Changes: %s\nTotal Clusters: %d | Threshold: ±%d%%', ...
+                strrep(comparison_name, '_', ' vs '), ...
+                length(data.cluster_ids), threshold*100);
+            title(title_str, 'FontSize', 14, 'FontWeight', 'bold');
+            
+            % Export if requested
+            if do_export
+                pie_filename = fullfile(export_folder, sprintf('cluster_proportions_pie_%s.png', comparison_name));
+                saveas(fig, pie_filename);
+                logger(sprintf('Saved pie chart: %s', pie_filename), 'INFO');
+            end
+        else
+            logger(sprintf('Warning: No data to plot for %s', comparison_name), 'WARNING');
+        end
+    end
+end
+
+%% Create bar chart for comparative analysis
+function create_cluster_proportion_bar_chart(diff_struct, threshold, visualize, export_folder, do_export)
+    field_names = fieldnames(diff_struct);
+    
+    % Prepare data for bar chart
+    comparison_names = {};
+    gained_props = [];
+    lost_props = [];
+    unchanged_props = [];
+    
+    for i = 1:length(field_names)
+        comparison_name = field_names{i};
+        data = diff_struct.(comparison_name);
+        
+        comparison_names{i} = strrep(comparison_name, '_', ' vs ');
+        gained_props(i) = data.proportion_gained * 100; % Convert to percentage
+        lost_props(i) = data.proportion_lost * 100;
+        unchanged_props(i) = data.proportion_unchanged * 100;
+    end
+    
+    % Create stacked bar chart
+    fig = figure('Visible', visualize);
+    set(fig, 'Position', [100, 100, 1000, 600]);
+    set(fig, 'Color', 'w');
+    
+    % Create stacked bar chart
+    bar_data = [gained_props', lost_props', unchanged_props'];
+    bar_handle = bar(bar_data, 'stacked');
+    
+    % Customize colors
+    set(bar_handle(1), 'FaceColor', [1, 0, 0]); % Red for gained
+    set(bar_handle(2), 'FaceColor', [0, 0, 1]); % Blue for lost
+    set(bar_handle(3), 'FaceColor', [0.7, 0.7, 0.7]); % Gray for unchanged
+    
+    % Customize axes
+    set(gca, 'XTickLabel', comparison_names);
+    ylabel('Percentage of Clusters', 'FontSize', 12);
+    xlabel('Comparison', 'FontSize', 12);
+    title(sprintf('Cluster Proportion Analysis (Threshold: ±%d%%)', threshold*100), ...
+        'FontSize', 14, 'FontWeight', 'bold');
+    
+    % Add legend
+    legend({'Gained', 'Lost', 'Unchanged'}, 'Location', 'best');
+    
+    % Add percentage labels on bars
+    for i = 1:length(comparison_names)
+        if gained_props(i) > 5 % Only show label if segment is large enough
+            text(i, gained_props(i)/2, sprintf('%.1f%%', gained_props(i)), ...
+                'HorizontalAlignment', 'center', 'Color', 'white', 'FontWeight', 'bold');
+        end
+        if lost_props(i) > 5
+            text(i, gained_props(i) + lost_props(i)/2, sprintf('%.1f%%', lost_props(i)), ...
+                'HorizontalAlignment', 'center', 'Color', 'white', 'FontWeight', 'bold');
+        end
+        if unchanged_props(i) > 5
+            text(i, gained_props(i) + lost_props(i) + unchanged_props(i)/2, sprintf('%.1f%%', unchanged_props(i)), ...
+                'HorizontalAlignment', 'center', 'Color', 'black', 'FontWeight', 'bold');
+        end
+    end
+    
+    grid on;
+    ylim([0, 100]);
+    
+    % Export if requested
+    if do_export
+        bar_filename = fullfile(export_folder, 'cluster_proportions_comparison_bar.png');
+        saveas(fig, bar_filename);
+        logger(sprintf('Saved bar chart: %s', bar_filename), 'INFO');
+    end
+end
+
+%% Generate proportion visualizations
+logger('Creating cluster proportion visualizations', 'INFO');
+
+% Create pie charts for each comparison
+create_cluster_proportion_pie_charts(diff_struct, threshold, visualize, export_folder, do_export);
+
+% Create comparative bar chart
+create_cluster_proportion_bar_chart(diff_struct, threshold, visualize, export_folder, do_export);
+
+% Save proportion analysis table if export is enabled
+if do_export
+    proportion_filename = fullfile(export_folder, 'cluster_proportion_analysis_80pct.csv');
+    writetable(proportion_analysis, proportion_filename);
+    logger(sprintf('Saved proportion analysis table: %s', proportion_filename), 'INFO');
+end
+
 %% Save analysis results
 analysis_filename = fullfile(export_folder, 'tsne_difference_analysis.mat');
-save(analysis_filename, 'diff_struct', 'summary_table', 'conditions_to_compare');
+save(analysis_filename, 'diff_struct', 'summary_table', 'proportion_analysis', 'conditions_to_compare');
 logger(sprintf('Saved analysis results: %s', analysis_filename), 'INFO');
 
 logger('t-SNE difference analysis completed', 'INFO');
