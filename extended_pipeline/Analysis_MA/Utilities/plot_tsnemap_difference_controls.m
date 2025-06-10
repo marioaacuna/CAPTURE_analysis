@@ -1,6 +1,6 @@
 %% Initialization
 global logger GC
-%logger('test tsne map difference', 'INFO'); % Modify
+%logger('test tsne map difference controls vs baseline', 'INFO'); % Modify
 clear;
 close all;
 clc;
@@ -18,11 +18,10 @@ else
 end
 
 % Export folder
-export_folder = fullfile(GC.temp_root, 'figs_presentation_painAI');
+export_folder = fullfile(GC.temp_root, 'figs_presentation_painAI_controls');
 if ~exist(export_folder, 'dir')
     mkdir(export_folder);
 end
-
 
 %% Load Data
 logger('Loading data', 'INFO');
@@ -44,104 +43,148 @@ animal_list_used_after_analysis =  long_animal_frames_identifier(analysisstruct.
 zvals = analysisstruct.zValues;
 cls_all = analysisstruct.annot_reordered{2}; % list of all clusters on the t-SNE map
 
-%% Calculate difference between conditions
-% select conditions
-conditions_to_compare = {{'S'}, {'F'}; {'H'}, {'N'}}; % we start with these combinations(S vs F and H vs N), but it could be expanded later to 'B', 'S', 'F' ; and  'B', 'H', 'N';
+%% Calculate difference between baseline and control conditions
+% Control conditions to compare with baseline ('B')
+conditions_to_compare = {{'B'}, {'S'}; {'B'}, {'H'}}; % B vs S and B vs H
 % Initialize a structure to hold the differences
 diff_struct = struct();
 
-%% Extract cluster information for each comparison
-logger('Analyzing cluster differences between conditions', 'INFO');
+%% Extract cluster information for each comparison with animal ID matching
+logger('Analyzing cluster differences between baseline and control conditions', 'INFO');
 
 % Get cluster assignments for all frames
 cluster_assignments = analysisstruct.annot_reordered{end,end}; % Final cluster assignments
 unique_clusters = unique(cluster_assignments);
 unique_clusters = unique_clusters(unique_clusters > 0); % Remove background/noise clusters
 
-% Map cluster assignments to animal conditions
+% Map cluster assignments to animal conditions and extract animal IDs
 frame_conditions = cell(length(cluster_assignments), 1);
+frame_animal_ids = cell(length(cluster_assignments), 1);
 for i = 1:length(cluster_assignments)
     if i <= length(animal_list_used_after_analysis)
         this_a = animal_list_used_after_analysis{i};
         this_cond = this_a(end); % Get last character as condition
+        % Extract animal ID (everything before the last '_')
+        underscore_pos = find(this_a == '_', 1, 'last');
+        if ~isempty(underscore_pos)
+            this_animal_id = this_a(1:underscore_pos-1);
+        else
+            this_animal_id = this_a; % fallback if no underscore found
+        end
         frame_conditions{i} = this_cond;
+        frame_animal_ids{i} = this_animal_id;
     else
         frame_conditions{i} = 'Unknown';
+        frame_animal_ids{i} = 'Unknown';
     end
 end
 
-%% Process each condition comparison
+%% Process each condition comparison (baseline vs controls) with animal matching
 for comp_idx = 1:size(conditions_to_compare, 1)
-    control_conditions = conditions_to_compare{comp_idx, 1};
-    experimental_conditions = conditions_to_compare{comp_idx, 2};
+    baseline_conditions = conditions_to_compare{comp_idx, 1}; % Always 'B'
+    control_conditions = conditions_to_compare{comp_idx, 2}; % 'S' or 'H'
     
-    comparison_name = sprintf('%s_vs_%s', strjoin(experimental_conditions, ''), strjoin(control_conditions, ''));
-    logger(sprintf('Processing comparison: %s', comparison_name), 'INFO');
+    comparison_name = sprintf('%s_vs_%s', strjoin(control_conditions, ''), strjoin(baseline_conditions, ''));
+    logger(sprintf('Processing comparison: %s (with animal ID matching)', comparison_name), 'INFO');
     
-    % Find frames belonging to each condition
-    control_frames = false(length(frame_conditions), 1);
-    experimental_frames = false(length(frame_conditions), 1);
+    % Find animals that have both baseline and control conditions
+    baseline_animal_ids = {};
+    control_animal_ids = {};
     
+    % Collect animal IDs for baseline frames
+    for i = 1:length(frame_conditions)
+        if any(strcmp(frame_conditions{i}, baseline_conditions))
+            baseline_animal_ids{end+1} = frame_animal_ids{i};
+        end
+    end
+    
+    % Collect animal IDs for control frames
     for i = 1:length(frame_conditions)
         if any(strcmp(frame_conditions{i}, control_conditions))
-            control_frames(i) = true;
-        elseif any(strcmp(frame_conditions{i}, experimental_conditions))
-            experimental_frames(i) = true;
+            control_animal_ids{end+1} = frame_animal_ids{i};
+        end
+    end
+    
+    % Find common animal IDs (animals that have both baseline and control data)
+    common_animal_ids = intersect(unique(baseline_animal_ids), unique(control_animal_ids));
+    logger(sprintf('Found %d animals with both baseline and %s conditions', ...
+        length(common_animal_ids), strjoin(control_conditions, ',')), 'INFO');
+    
+    if isempty(common_animal_ids)
+        logger(sprintf('Warning: No common animals found for comparison %s', comparison_name), 'WARNING');
+        continue;
+    end
+    
+    % Find frames belonging to each condition for matched animals only
+    baseline_frames = false(length(frame_conditions), 1);
+    control_frames = false(length(frame_conditions), 1);
+    
+    for i = 1:length(frame_conditions)
+        animal_id = frame_animal_ids{i};
+        if any(strcmp(animal_id, common_animal_ids))
+            if any(strcmp(frame_conditions{i}, baseline_conditions))
+                baseline_frames(i) = true;
+            elseif any(strcmp(frame_conditions{i}, control_conditions))
+                control_frames(i) = true;
+            end
         end
     end
     
     % Calculate cluster prevalence for each condition
+    baseline_cluster_counts = zeros(length(unique_clusters), 1);
     control_cluster_counts = zeros(length(unique_clusters), 1);
-    experimental_cluster_counts = zeros(length(unique_clusters), 1);
     total_cluster_frames = zeros(length(unique_clusters), 1);
     
     for c_idx = 1:length(unique_clusters)
         cluster_id = unique_clusters(c_idx);
         cluster_frames = cluster_assignments == cluster_id;
         
+        baseline_cluster_counts(c_idx) = sum(cluster_frames' & baseline_frames);
         control_cluster_counts(c_idx) = sum(cluster_frames' & control_frames);
-        experimental_cluster_counts(c_idx) = sum(cluster_frames' & experimental_frames);
         total_cluster_frames(c_idx) = sum(cluster_frames); % Total frames in this cluster
     end
     
     % Calculate total frames for normalization (for reference)
+    total_baseline_frames = sum(baseline_frames);
     total_control_frames = sum(control_frames);
-    total_experimental_frames = sum(experimental_frames);
     
     % Calculate cluster-normalized prevalence (percentage within each cluster)
+    baseline_prevalence = zeros(length(unique_clusters), 1);
     control_prevalence = zeros(length(unique_clusters), 1);
-    experimental_prevalence = zeros(length(unique_clusters), 1);
     
     for c_idx = 1:length(unique_clusters)
         if total_cluster_frames(c_idx) > 0
+            baseline_prevalence(c_idx) = baseline_cluster_counts(c_idx) / total_cluster_frames(c_idx);
             control_prevalence(c_idx) = control_cluster_counts(c_idx) / total_cluster_frames(c_idx);
-            experimental_prevalence(c_idx) = experimental_cluster_counts(c_idx) / total_cluster_frames(c_idx);
         end
     end
     
-    % Calculate difference (experimental - control) normalized by cluster size
-    cluster_difference = experimental_prevalence - control_prevalence;
+    % Calculate difference (control - baseline) normalized by cluster size
+    cluster_difference = control_prevalence - baseline_prevalence;
     
-    % Identify clusters that are gained (higher in experimental) or lost (higher in control)
+    % Identify clusters that are gained (higher in control) or lost (higher in baseline)
     gained_clusters = unique_clusters(cluster_difference > 0);
     lost_clusters = unique_clusters(cluster_difference < 0);
     
     % Store results
+    diff_struct.(comparison_name).baseline_conditions = baseline_conditions;
     diff_struct.(comparison_name).control_conditions = control_conditions;
-    diff_struct.(comparison_name).experimental_conditions = experimental_conditions;
+    diff_struct.(comparison_name).common_animal_ids = common_animal_ids;
     diff_struct.(comparison_name).cluster_ids = unique_clusters;
+    diff_struct.(comparison_name).baseline_prevalence = baseline_prevalence;
     diff_struct.(comparison_name).control_prevalence = control_prevalence;
-    diff_struct.(comparison_name).experimental_prevalence = experimental_prevalence;
     diff_struct.(comparison_name).cluster_difference = cluster_difference;
     diff_struct.(comparison_name).gained_clusters = gained_clusters;
     diff_struct.(comparison_name).lost_clusters = lost_clusters;
+    diff_struct.(comparison_name).total_baseline_frames = total_baseline_frames;
+    diff_struct.(comparison_name).total_control_frames = total_control_frames;
     
-    logger(sprintf('Found %d gained clusters and %d lost clusters for %s', ...
-        length(gained_clusters), length(lost_clusters), comparison_name), 'INFO');
+    logger(sprintf('Found %d gained clusters and %d lost clusters for %s (matched animals: %d)', ...
+        length(gained_clusters), length(lost_clusters), comparison_name, length(common_animal_ids)), 'INFO');
 end
 
-%% Create visualization function for t-SNE difference maps
-function plot_tsne_difference_map(analysisstruct, diff_data, comparison_name, visualize)
+%% Create visualization function for t-SNE difference maps (baseline vs controls)
+function plot_tsne_difference_map_controls(analysisstruct, diff_data, comparison_name, visualize)
     % Create figure
     fig = figure('Visible', visualize);
     set(fig, 'Position', [100, 100, 1200, 800]);
@@ -165,8 +208,8 @@ function plot_tsne_difference_map(analysisstruct, diff_data, comparison_name, vi
     end
     
     title(sprintf('Gained Clusters (%s > %s)', ...
-        strjoin(diff_data.experimental_conditions, ','), ...
-        strjoin(diff_data.control_conditions, ',')));
+        strjoin(diff_data.control_conditions, ','), ...
+        strjoin(diff_data.baseline_conditions, ',')));
     xlabel('t-SNE 1');
     ylabel('t-SNE 2');
     axis equal;
@@ -190,8 +233,8 @@ function plot_tsne_difference_map(analysisstruct, diff_data, comparison_name, vi
     end
     
     title(sprintf('Lost Clusters (%s < %s)', ...
-        strjoin(diff_data.experimental_conditions, ','), ...
-        strjoin(diff_data.control_conditions, ',')));
+        strjoin(diff_data.control_conditions, ','), ...
+        strjoin(diff_data.baseline_conditions, ',')));
     xlabel('t-SNE 1');
     ylabel('t-SNE 2');
     axis equal;
@@ -226,7 +269,7 @@ function plot_tsne_difference_map(analysisstruct, diff_data, comparison_name, vi
     end
     
     % Add legend
-    legend({'Background', 'Gained (Experimental > Control)', 'Lost (Experimental < Control)'}, ...
+    legend({'Background', 'Gained (Control > Baseline)', 'Lost (Control < Baseline)'}, ...
         'Location', 'best');
     
     title(sprintf('Combined Difference Map: %s', comparison_name));
@@ -235,13 +278,14 @@ function plot_tsne_difference_map(analysisstruct, diff_data, comparison_name, vi
     axis equal;
     grid on;
     
-    % Add main title
-    sgtitle(sprintf('t-SNE Cluster Differences: %s', strrep(comparison_name, '_', ' vs ')), ...
+    % Add main title with animal count
+    sgtitle(sprintf('t-SNE Cluster Differences: %s (n=%d animals)', ...
+        strrep(comparison_name, '_', ' vs '), length(diff_data.common_animal_ids)), ...
         'FontSize', 16, 'FontWeight', 'bold');
 end
 
-%% Create enhanced watershed-based visualization
-function plot_tsne_watershed_difference(analysisstruct, diff_data, comparison_name, visualize)
+%% Create enhanced watershed-based visualization for controls
+function plot_tsne_watershed_difference_controls(analysisstruct, diff_data, comparison_name, visualize)
     % Create figure with watershed boundaries
     fig = figure('Visible', visualize);
     set(fig, 'Position', [100, 100, 1400, 600]);
@@ -300,7 +344,7 @@ function plot_tsne_watershed_difference(analysisstruct, diff_data, comparison_na
         end
     end
     
-    title('Difference Map with Cluster Boundaries');
+    title('Control vs Baseline Difference Map');
     xlabel('t-SNE 1');
     ylabel('t-SNE 2');
     axis equal;
@@ -331,35 +375,39 @@ function plot_tsne_watershed_difference(analysisstruct, diff_data, comparison_na
     colorbar;
     caxis([-max(abs(difference_values)), max(abs(difference_values))]);
     
-    title('Cluster Difference Intensity');
+    title('Cluster Difference Intensity (Control vs Baseline)');
     xlabel('t-SNE 1');
     ylabel('t-SNE 2');
     axis equal;
     
     % Add main title
-    sgtitle(sprintf('Enhanced t-SNE Analysis: %s', strrep(comparison_name, '_', ' vs ')), ...
+    sgtitle(sprintf('Enhanced Control Analysis: %s (n=%d animals)', ...
+        strrep(comparison_name, '_', ' vs '), length(diff_data.common_animal_ids)), ...
         'FontSize', 16, 'FontWeight', 'bold');
 end
 
 %% Generate visualizations for each comparison
 for comp_idx = 1:size(conditions_to_compare, 1)
-    control_conditions = conditions_to_compare{comp_idx, 1};
-    experimental_conditions = conditions_to_compare{comp_idx, 2};
-    comparison_name = sprintf('%s_vs_%s', strjoin(experimental_conditions, ''), strjoin(control_conditions, ''));
+    baseline_conditions = conditions_to_compare{comp_idx, 1};
+    control_conditions = conditions_to_compare{comp_idx, 2};
+    comparison_name = sprintf('%s_vs_%s', strjoin(control_conditions, ''), strjoin(baseline_conditions, ''));
     
-    plot_tsne_difference_map(analysisstruct, diff_struct.(comparison_name), ...
-        comparison_name, visualize);
-    
-    plot_tsne_watershed_difference(analysisstruct, diff_struct.(comparison_name), ...
-        comparison_name, visualize);
+    if isfield(diff_struct, comparison_name)
+        plot_tsne_difference_map_controls(analysisstruct, diff_struct.(comparison_name), ...
+            comparison_name, visualize);
+        
+        plot_tsne_watershed_difference_controls(analysisstruct, diff_struct.(comparison_name), ...
+            comparison_name, visualize);
+    end
 end
 
-%% Create summary statistics table
-logger('Creating summary statistics', 'INFO');
+%% Create summary statistics table for control comparisons
+logger('Creating summary statistics for control vs baseline comparisons', 'INFO');
 
 % Create a summary table of differences
 summary_table = table();
 comparison_names = {};
+num_animals = [];
 num_gained = [];
 num_lost = [];
 total_clusters = [];
@@ -369,6 +417,8 @@ top_20_increased_clusters = {};
 bottom_20_decreased_clusters = {};
 num_top_20_increased = [];
 num_bottom_20_decreased = [];
+baseline_frames_count = [];
+control_frames_count = [];
 
 comp_idx = 1;
 field_names = fieldnames(diff_struct);
@@ -377,11 +427,14 @@ for i = 1:length(field_names)
     data = diff_struct.(comparison_name);
     
     comparison_names{comp_idx} = strrep(comparison_name, '_', ' vs ');
+    num_animals(comp_idx) = length(data.common_animal_ids);
     num_gained(comp_idx) = length(data.gained_clusters);
     num_lost(comp_idx) = length(data.lost_clusters);
     total_clusters(comp_idx) = length(data.cluster_ids);
     max_gain(comp_idx) = max(data.cluster_difference);
     max_loss(comp_idx) = min(data.cluster_difference);
+    baseline_frames_count(comp_idx) = data.total_baseline_frames;
+    control_frames_count(comp_idx) = data.total_control_frames;
     
     % Calculate z-scores for cluster differences
     cluster_diff_zscore = zscore(data.cluster_difference);
@@ -416,23 +469,14 @@ for i = 1:length(field_names)
     diff_struct.(comparison_name).bottom_20_decreased_clusters = bottom_20_decreased_cluster_ids;
     diff_struct.(comparison_name).top_20_increased_zscores = top_20_increased_zscores;
     diff_struct.(comparison_name).bottom_20_decreased_zscores = bottom_20_decreased_zscores;
-      % Log the statistically significant clusters with formatted output
-    % cluster_z_pairs_increased = sprintf('Cluster %d (z=%.2f) ', ...
-        % [top_20_increased_cluster_ids'; top_20_increased_zscores']);
-    % logger(sprintf('For %s: Top 20%% increased clusters (n=%d): %s', ...
-        % comparison_names{comp_idx}, length(top_20_increased_cluster_ids), ...
-        % cluster_z_pairs_increased), 'INFO');
-    
-    % cluster_z_pairs_decreased = sprintf('Cluster %d (z=%.2f) ', ...
-    %     [bottom_20_decreased_cluster_ids'; bottom_20_decreased_zscores']);
-    % logger(sprintf('For %s: Bottom 20%% decreased clusters (n=%d): %s', ...
-    %     comparison_names{comp_idx}, length(bottom_20_decreased_cluster_ids), ...
-    %     cluster_z_pairs_decreased), 'INFO');
     
     comp_idx = comp_idx + 1;
 end
 
 summary_table.Comparison = comparison_names';
+summary_table.Matched_Animals = num_animals';
+summary_table.Baseline_Frames = baseline_frames_count';
+summary_table.Control_Frames = control_frames_count';
 summary_table.Total_Clusters = total_clusters';
 summary_table.Gained_Clusters = num_gained';
 summary_table.Lost_Clusters = num_lost';
@@ -444,19 +488,76 @@ summary_table.Top_20pct_Increased_Clusters = top_20_increased_clusters';
 summary_table.Bottom_20pct_Decreased_Clusters = bottom_20_decreased_clusters';
 
 % Display summary
-disp('=== t-SNE Cluster Difference Summary ===');
+disp('=== Control vs Baseline t-SNE Cluster Difference Summary ===');
 disp(summary_table);
 
 % Save summary table if export is enabled
 if do_export
-    summary_filename = fullfile(export_folder, 'cluster_difference_summary.csv');
+    summary_filename = fullfile(export_folder, 'control_vs_baseline_difference_summary.csv');
     writetable(summary_table, summary_filename);
-    logger(sprintf('Saved summary table: %s', summary_filename), 'INFO');
+    logger(sprintf('Saved control vs baseline summary table: %s', summary_filename), 'INFO');
+end
+
+%% Create per-animal analysis (optional detailed breakdown)
+logger('Creating per-animal detailed analysis', 'INFO');
+
+% For each comparison, analyze individual animal contributions
+field_names = fieldnames(diff_struct);
+per_animal_analysis = struct();
+
+for i = 1:length(field_names)
+    comparison_name = field_names{i};
+    data = diff_struct.(comparison_name);
+    
+    per_animal_analysis.(comparison_name) = struct();
+    per_animal_analysis.(comparison_name).animal_ids = data.common_animal_ids;
+    
+    % For each animal, calculate their individual contribution to cluster differences
+    animal_contributions = zeros(length(data.common_animal_ids), length(data.cluster_ids));
+    
+    for animal_idx = 1:length(data.common_animal_ids)
+        animal_id = data.common_animal_ids{animal_idx};
+        
+        % Find frames for this specific animal in baseline and control conditions
+        animal_baseline_frames = false(length(frame_conditions), 1);
+        animal_control_frames = false(length(frame_conditions), 1);
+        
+        for j = 1:length(frame_conditions)
+            if strcmp(frame_animal_ids{j}, animal_id)
+                if any(strcmp(frame_conditions{j}, data.baseline_conditions))
+                    animal_baseline_frames(j) = true;
+                elseif any(strcmp(frame_conditions{j}, data.control_conditions))
+                    animal_control_frames(j) = true;
+                end
+            end
+        end
+        
+        % Calculate cluster prevalence for this animal
+        for c_idx = 1:length(data.cluster_ids)
+            cluster_id = data.cluster_ids(c_idx);
+            cluster_frames = cluster_assignments == cluster_id;
+            
+            animal_baseline_count = sum(cluster_frames' & animal_baseline_frames);
+            animal_control_count = sum(cluster_frames' & animal_control_frames);
+            
+            total_animal_baseline = sum(animal_baseline_frames);
+            total_animal_control = sum(animal_control_frames);
+            
+            if total_animal_baseline > 0 && total_animal_control > 0
+                baseline_prev = animal_baseline_count / total_animal_baseline;
+                control_prev = animal_control_count / total_animal_control;
+                animal_contributions(animal_idx, c_idx) = control_prev - baseline_prev;
+            end
+        end
+    end
+    
+    per_animal_analysis.(comparison_name).contributions = animal_contributions;
+    per_animal_analysis.(comparison_name).cluster_ids = data.cluster_ids;
 end
 
 %% Save analysis results
-analysis_filename = fullfile(export_folder, 'tsne_difference_analysis.mat');
-save(analysis_filename, 'diff_struct', 'summary_table', 'conditions_to_compare');
-logger(sprintf('Saved analysis results: %s', analysis_filename), 'INFO');
+analysis_filename = fullfile(export_folder, 'tsne_control_vs_baseline_analysis.mat');
+save(analysis_filename, 'diff_struct', 'summary_table', 'per_animal_analysis', 'conditions_to_compare');
+logger(sprintf('Saved control vs baseline analysis results: %s', analysis_filename), 'INFO');
 
-logger('t-SNE difference analysis completed', 'INFO');
+logger('Control vs baseline t-SNE difference analysis completed', 'INFO');
