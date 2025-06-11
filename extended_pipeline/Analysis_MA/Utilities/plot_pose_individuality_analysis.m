@@ -99,7 +99,7 @@
 % % Ensure general_configs is properly set up
 % GC = general_configs;
 % % Run the complete analysis (user will be prompted to select condition)
-% run('plot_tsnemap_baseline_per_animal.m');
+% run('plot_pose_individuality_analysis.m');
 %
 % AUTHORS: CAPTURE Analysis Team
 % CREATED: 2025
@@ -124,7 +124,7 @@ rootpath = GC.preprocessing_rootpath;
 %% User Input Dialog for Condition and Debug Mode Selection
 % Available conditions
 available_conditions = {'B', 'S', 'F', 'H', 'N'};
-condition_names = {'Baseline', 'Stimulation', 'Formalin', 'Handling', 'Neutral'};
+condition_names = {'Baseline', 'Sham', 'Formalin', 'Sham', 'Neuropathic'};
 
 % Create condition selection dialog
 [condition_idx, ok] = listdlg('PromptString', 'Select condition to analyze:', ...
