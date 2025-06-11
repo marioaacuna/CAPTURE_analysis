@@ -628,19 +628,47 @@ function plot_individuality_statistics_baseline(individuality_data, visualize, e
         end
     end
     
-    % Create grouped bar chart
-    bar_data = [individual_counts, total_present_counts - individual_counts];
+    % Calculate percentages for normalized stacked bar chart
+    individual_percentages = zeros(length(animals), 1);
+    shared_percentages = zeros(length(animals), 1);
+    
+    for i = 1:length(animals)
+        if total_present_counts(i) > 0
+            individual_percentages(i) = (individual_counts(i) / total_present_counts(i)) * 100;
+            shared_percentages(i) = ((total_present_counts(i) - individual_counts(i)) / total_present_counts(i)) * 100;
+        end
+    end
+    
+    % Create normalized stacked bar chart (percentages)
+    bar_data = [individual_percentages, shared_percentages];
     bar_handle = bar(bar_data, 'stacked');
     set(bar_handle(1), 'FaceColor', [1, 0.2, 0.2]); % Red for individual
     set(bar_handle(2), 'FaceColor', [0.7, 0.7, 0.7]); % Gray for shared
     
     xlabel('Animal ID');
-    ylabel('Number of Clusters');
-    title('Individual vs Shared Clusters per Animal (All Clusters Present)');
-    legend('Individual Clusters', 'Shared Clusters', 'Location', 'best');
+    ylabel('Percentage of Clusters');
+    title('Individual vs Shared Clusters per Animal (Normalized to 100%)');
+    legend('Individual Clusters (%)', 'Shared Clusters (%)', 'Location', 'best');
+    
+    % Set y-axis to 0-100%
+    ylim([0, 100]);
+    
+    % Add percentage labels on bars for individual clusters
+    for i = 1:length(animals)
+        if individual_percentages(i) > 5 % Only show label if segment is large enough
+            text(i, individual_percentages(i)/2, sprintf('%.1f%%', individual_percentages(i)), ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                'Color', 'white', 'FontWeight', 'bold', 'FontSize', 8);
+        end
+        % Add total cluster count as text above each bar
+        text(i, 102, sprintf('n=%d', total_present_counts(i)), ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+            'FontSize', 8, 'Color', 'black');
+    end
     
     % Set x-axis labels
     set(gca, 'XTickLabel', animals);
+    set(gca, 'TickDir', 'out');
     xtickangle(45);
     
     sgtitle('Pose Individuality Statistical Analysis - Baseline', 'FontSize', 16, 'FontWeight', 'bold');
