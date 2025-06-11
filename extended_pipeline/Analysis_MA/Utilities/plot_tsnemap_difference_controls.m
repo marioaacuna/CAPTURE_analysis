@@ -791,9 +791,403 @@ if do_export
     logger(sprintf('Saved proportion analysis table: %s', proportion_filename), 'INFO');
 end
 
+%% Individuality Analysis - Analyze cluster dominance by individual animals
+logger('Starting individuality analysis - evaluating pose uniqueness per animal', 'INFO');
+
+% Define individuality threshold (80% of frames in a cluster belong to one animal)
+individuality_threshold = 0.8;
+
+% Get all unique animal IDs from baseline condition
+all_baseline_animal_ids = {};
+for i = 1:length(frame_conditions)
+    if strcmp(frame_conditions{i}, 'B') && ~strcmp(frame_animal_ids{i}, 'Unknown')
+        all_baseline_animal_ids{end+1} = frame_animal_ids{i};
+    end
+end
+unique_baseline_animals = unique(all_baseline_animal_ids);
+
+logger(sprintf('Found %d unique animals with baseline condition for individuality analysis', ...
+    length(unique_baseline_animals)), 'INFO');
+
+% Initialize individuality analysis structure
+individuality_analysis = struct();
+individuality_analysis.threshold = individuality_threshold;
+individuality_analysis.unique_animals = unique_baseline_animals;
+individuality_analysis.cluster_ids = unique_clusters;
+
+% For each cluster, calculate animal composition (only baseline frames)
+cluster_animal_composition = cell(length(unique_clusters), 1);
+cluster_dominant_animal = cell(length(unique_clusters), 1);
+cluster_dominance_percentage = zeros(length(unique_clusters), 1);
+cluster_is_individual = false(length(unique_clusters), 1);
+
+logger('Analyzing cluster composition for each animal...', 'INFO');
+
+for c_idx = 1:length(unique_clusters)
+    cluster_id = unique_clusters(c_idx);
+    cluster_frames = cluster_assignments == cluster_id;
+    
+    % Count frames per animal in this cluster (baseline only)
+    animal_frame_counts = containers.Map();
+    total_baseline_frames_in_cluster = 0;
+    
+    for i = 1:length(frame_conditions)
+        if cluster_frames(i) && strcmp(frame_conditions{i}, 'B') && ~strcmp(frame_animal_ids{i}, 'Unknown')
+            animal_id = frame_animal_ids{i};
+            if isKey(animal_frame_counts, animal_id)
+                animal_frame_counts(animal_id) = animal_frame_counts(animal_id) + 1;
+            else
+                animal_frame_counts(animal_id) = 1;
+            end
+            total_baseline_frames_in_cluster = total_baseline_frames_in_cluster + 1;
+        end
+    end
+    
+    % Find dominant animal and calculate percentage
+    if total_baseline_frames_in_cluster > 0
+        animals = keys(animal_frame_counts);
+        counts = values(animal_frame_counts);
+        counts = cell2mat(counts);
+        
+        [max_count, max_idx] = max(counts);
+        dominant_animal = animals{max_idx};
+        dominance_percentage = max_count / total_baseline_frames_in_cluster;
+        
+        cluster_dominant_animal{c_idx} = dominant_animal;
+        cluster_dominance_percentage(c_idx) = dominance_percentage;
+        cluster_is_individual(c_idx) = dominance_percentage >= individuality_threshold;
+        
+        % Store full composition
+        composition = struct();
+        for j = 1:length(animals)
+            composition.(animals{j}) = counts(j) / total_baseline_frames_in_cluster;
+        end
+        cluster_animal_composition{c_idx} = composition;
+    else
+        cluster_dominant_animal{c_idx} = 'None';
+        cluster_dominance_percentage(c_idx) = 0;
+        cluster_is_individual(c_idx) = false;
+        cluster_animal_composition{c_idx} = struct();
+    end
+end
+
+% Store results in individuality analysis structure
+individuality_analysis.cluster_animal_composition = cluster_animal_composition;
+individuality_analysis.cluster_dominant_animal = cluster_dominant_animal;
+individuality_analysis.cluster_dominance_percentage = cluster_dominance_percentage;
+individuality_analysis.cluster_is_individual = cluster_is_individual;
+
+% Calculate summary statistics
+total_clusters_analyzed = sum(cluster_dominance_percentage > 0);
+individual_clusters = sum(cluster_is_individual);
+individual_percentage = (individual_clusters / total_clusters_analyzed) * 100;
+
+logger(sprintf('Individuality Summary: %d/%d clusters (%.1f%%) show individual dominance (>%.0f%%)', ...
+    individual_clusters, total_clusters_analyzed, individual_percentage, individuality_threshold*100), 'INFO');
+
+% Per-animal individuality statistics
+animal_individual_clusters = containers.Map();
+animal_total_dominant_clusters = containers.Map();
+
+for c_idx = 1:length(unique_clusters)
+    if ~strcmp(cluster_dominant_animal{c_idx}, 'None')
+        animal_id = cluster_dominant_animal{c_idx};
+        
+        % Count total dominant clusters per animal
+        if isKey(animal_total_dominant_clusters, animal_id)
+            animal_total_dominant_clusters(animal_id) = animal_total_dominant_clusters(animal_id) + 1;
+        else
+            animal_total_dominant_clusters(animal_id) = 1;
+        end
+        
+        % Count individual clusters per animal
+        if cluster_is_individual(c_idx)
+            if isKey(animal_individual_clusters, animal_id)
+                animal_individual_clusters(animal_id) = animal_individual_clusters(animal_id) + 1;
+            else
+                animal_individual_clusters(animal_id) = 1;
+            end
+        end
+    end
+end
+
+% Store per-animal statistics
+individuality_analysis.animal_individual_clusters = animal_individual_clusters;
+individuality_analysis.animal_total_dominant_clusters = animal_total_dominant_clusters;
+
+%% Create individuality visualization functions
+
+function plot_individuality_tsne_map(analysisstruct, individuality_data, visualize)
+    % Create figure showing individual clusters on t-SNE map
+    fig = figure('Visible', visualize);
+    set(fig, 'Position', [100, 100, 1400, 800]);
+    set(fig, 'Color', 'w');
+    
+    % Subplot 1: Individual vs non-individual clusters
+    subplot(1, 2, 1);
+    plot(analysisstruct.zValues(:,1), analysisstruct.zValues(:,2), '.', ...
+        'Color', [0.9, 0.9, 0.9], 'MarkerSize', 1);
+    hold on;
+    
+    % Highlight individual clusters
+    for c_idx = 1:length(individuality_data.cluster_ids)
+        if individuality_data.cluster_is_individual(c_idx)
+            cluster_id = individuality_data.cluster_ids(c_idx);
+            cluster_frames = analysisstruct.annot_reordered{end,end} == cluster_id;
+            if sum(cluster_frames) > 0
+                plot(analysisstruct.zValues(cluster_frames,1), ...
+                     analysisstruct.zValues(cluster_frames,2), '.', ...
+                     'Color', [1, 0, 0], 'MarkerSize', 4);
+            end
+        end
+    end
+    
+    title(sprintf('Individual Clusters (>%d%% dominance)', individuality_data.threshold*100));
+    xlabel('t-SNE 1');
+    ylabel('t-SNE 2');
+    axis equal;
+    legend({'All clusters', 'Individual clusters'}, 'Location', 'best');
+    grid on;
+    
+    % Subplot 2: Dominance percentage heatmap
+    subplot(1, 2, 2);
+    
+    % Create a colormap based on dominance percentage
+    dominance_values = zeros(size(analysisstruct.zValues, 1), 1);
+    
+    for c_idx = 1:length(individuality_data.cluster_ids)
+        cluster_id = individuality_data.cluster_ids(c_idx);
+        cluster_frames = analysisstruct.annot_reordered{end,end} == cluster_id;
+        dominance_values(cluster_frames) = individuality_data.cluster_dominance_percentage(c_idx);
+    end
+    
+    % Create scatter plot colored by dominance
+    scatter(analysisstruct.zValues(:,1), analysisstruct.zValues(:,2), 8, dominance_values, 'filled');
+    
+    % Set colormap and colorbar
+    colormap(hot);
+    colorbar;
+    caxis([0, 1]);
+    
+    title('Cluster Dominance Percentage');
+    xlabel('t-SNE 1');
+    ylabel('t-SNE 2');
+    axis equal;
+    
+    % Add main title
+    sgtitle(sprintf('Pose Individuality Analysis (n=%d animals, %d clusters)', ...
+        length(individuality_data.unique_animals), length(individuality_data.cluster_ids)), ...
+        'FontSize', 16, 'FontWeight', 'bold');
+end
+
+function plot_individuality_per_animal_tsne(analysisstruct, individuality_data, visualize)
+    % Create figure showing individual clusters for each animal separately
+    unique_animals = individuality_data.unique_animals;
+    n_animals = length(unique_animals);
+    
+    % Create subplot grid
+    n_cols = ceil(sqrt(n_animals));
+    n_rows = ceil(n_animals / n_cols);
+    
+    fig = figure('Visible', visualize);
+    set(fig, 'Position', [100, 100, 1600, 1200]);
+    set(fig, 'Color', 'w');
+    
+    for a_idx = 1:n_animals
+        animal_id = unique_animals{a_idx};
+        
+        subplot(n_rows, n_cols, a_idx);
+        
+        % Plot all points in gray
+        plot(analysisstruct.zValues(:,1), analysisstruct.zValues(:,2), '.', ...
+            'Color', [0.9, 0.9, 0.9], 'MarkerSize', 1);
+        hold on;
+        
+        % Highlight clusters dominated by this animal
+        for c_idx = 1:length(individuality_data.cluster_ids)
+            if strcmp(individuality_data.cluster_dominant_animal{c_idx}, animal_id) && ...
+               individuality_data.cluster_is_individual(c_idx)
+                cluster_id = individuality_data.cluster_ids(c_idx);
+                cluster_frames = analysisstruct.annot_reordered{end,end} == cluster_id;
+                if sum(cluster_frames) > 0
+                    plot(analysisstruct.zValues(cluster_frames,1), ...
+                         analysisstruct.zValues(cluster_frames,2), '.', ...
+                         'Color', [1, 0, 0], 'MarkerSize', 3);
+                end
+            end
+        end
+        
+        % Calculate individual clusters for this animal
+        individual_count = 0;
+        if isKey(individuality_data.animal_individual_clusters, animal_id)
+            individual_count = individuality_data.animal_individual_clusters(animal_id);
+        end
+        
+        title(sprintf('%s (%d individual clusters)', animal_id, individual_count));
+        xlabel('t-SNE 1');
+        ylabel('t-SNE 2');
+        axis equal;
+        axis tight;
+    end
+    
+    sgtitle('Individual Clusters per Animal', 'FontSize', 16, 'FontWeight', 'bold');
+end
+
+function plot_individuality_statistics(individuality_data, visualize, export_folder, do_export)
+    % Create comprehensive statistical plots
+    
+    % Figure 1: Overall statistics
+    fig1 = figure('Visible', visualize);
+    set(fig1, 'Position', [100, 100, 1200, 800]);
+    set(fig1, 'Color', 'w');
+    
+    % Subplot 1: Pie chart of individual vs non-individual clusters
+    subplot(2, 2, 1);
+    individual_count = sum(individuality_data.cluster_is_individual);
+    total_count = length(individuality_data.cluster_ids);
+    non_individual_count = total_count - individual_count;
+    
+    pie_data = [individual_count, non_individual_count];
+    pie_labels = {sprintf('Individual (%.1f%%)', (individual_count/total_count)*100), ...
+                  sprintf('Shared (%.1f%%)', (non_individual_count/total_count)*100)};
+    pie_handle = pie(pie_data, pie_labels);
+    
+    % Color the pie slices
+    set(pie_handle(1), 'FaceColor', [1, 0.2, 0.2]); % Red for individual
+    set(pie_handle(3), 'FaceColor', [0.7, 0.7, 0.7]); % Gray for shared
+    
+    title(sprintf('Cluster Individuality (Threshold: %d%%)', individuality_data.threshold*100));
+    
+    % Subplot 2: Histogram of dominance percentages
+    subplot(2, 2, 2);
+    valid_dominance = individuality_data.cluster_dominance_percentage(individuality_data.cluster_dominance_percentage > 0);
+    histogram(valid_dominance, 20, 'FaceColor', [0.3, 0.6, 1], 'EdgeColor', 'black');
+    xlabel('Dominance Percentage');
+    ylabel('Number of Clusters');
+    title('Distribution of Cluster Dominance');
+    xlim([0, 1]);
+    
+    % Add threshold line
+    hold on;
+    line([individuality_data.threshold, individuality_data.threshold], ylim, ...
+        'Color', 'red', 'LineStyle', '--', 'LineWidth', 2);
+    legend('Clusters', sprintf('%d%% Threshold', individuality_data.threshold*100), 'Location', 'best');
+    
+    % Subplot 3: Per-animal individual cluster counts
+    subplot(2, 2, [3, 4]);
+    
+    % Prepare data for bar chart
+    animals = individuality_data.unique_animals;
+    individual_counts = zeros(length(animals), 1);
+    total_dominant_counts = zeros(length(animals), 1);
+    
+    for i = 1:length(animals)
+        animal_id = animals{i};
+        if isKey(individuality_data.animal_individual_clusters, animal_id)
+            individual_counts(i) = individuality_data.animal_individual_clusters(animal_id);
+        end
+        if isKey(individuality_data.animal_total_dominant_clusters, animal_id)
+            total_dominant_counts(i) = individuality_data.animal_total_dominant_clusters(animal_id);
+        end
+    end
+    
+    % Create grouped bar chart
+    bar_data = [individual_counts, total_dominant_counts - individual_counts];
+    bar_handle = bar(bar_data, 'stacked');
+    set(bar_handle(1), 'FaceColor', [1, 0.2, 0.2]); % Red for individual
+    set(bar_handle(2), 'FaceColor', [0.7, 0.7, 0.7]); % Gray for shared
+    
+    xlabel('Animal ID');
+    ylabel('Number of Clusters');
+    title('Individual vs Shared Dominant Clusters per Animal');
+    legend('Individual Clusters', 'Shared Dominant Clusters', 'Location', 'best');
+    
+    % Set x-axis labels
+    set(gca, 'XTickLabel', animals);
+    xtickangle(45);
+    
+    sgtitle('Pose Individuality Statistical Analysis', 'FontSize', 16, 'FontWeight', 'bold');
+    
+    % Export if requested
+    if do_export
+        stats_filename = fullfile(export_folder, 'individuality_statistics.png');
+        saveas(fig1, stats_filename);
+        logger(sprintf('Saved individuality statistics: %s', stats_filename), 'INFO');
+    end
+end
+
+%% Generate individuality visualizations
+logger('Creating individuality visualizations', 'INFO');
+
+% Create t-SNE individuality maps
+plot_individuality_tsne_map(analysisstruct, individuality_analysis, visualize);
+
+% Create per-animal individuality maps
+plot_individuality_per_animal_tsne(analysisstruct, individuality_analysis, visualize);
+
+% Create statistical analysis plots
+plot_individuality_statistics(individuality_analysis, visualize, export_folder, do_export);
+
+%% Create individuality summary table
+logger('Creating individuality summary table', 'INFO');
+
+% Create detailed summary table
+individuality_table = table();
+animal_ids = individuality_analysis.unique_animals;
+individual_cluster_counts = zeros(length(animal_ids), 1);
+total_dominant_cluster_counts = zeros(length(animal_ids), 1);
+individuality_percentages = zeros(length(animal_ids), 1);
+
+for i = 1:length(animal_ids)
+    animal_id = animal_ids{i};
+    
+    % Get individual cluster count
+    if isKey(individuality_analysis.animal_individual_clusters, animal_id)
+        individual_cluster_counts(i) = individuality_analysis.animal_individual_clusters(animal_id);
+    end
+    
+    % Get total dominant cluster count
+    if isKey(individuality_analysis.animal_total_dominant_clusters, animal_id)
+        total_dominant_cluster_counts(i) = individuality_analysis.animal_total_dominant_clusters(animal_id);
+    end
+    
+    % Calculate individuality percentage
+    if total_dominant_cluster_counts(i) > 0
+        individuality_percentages(i) = (individual_cluster_counts(i) / total_dominant_cluster_counts(i)) * 100;
+    end
+end
+
+individuality_table.Animal_ID = animal_ids;
+individuality_table.Individual_Clusters = individual_cluster_counts;
+individuality_table.Total_Dominant_Clusters = total_dominant_cluster_counts;
+individuality_table.Individuality_Percentage = individuality_percentages;
+
+% Add overall statistics
+total_clusters_analyzed = length(individuality_analysis.cluster_ids);
+total_individual_clusters = sum(individuality_analysis.cluster_is_individual);
+overall_individuality_percentage = (total_individual_clusters / total_clusters_analyzed) * 100;
+
+% Display results
+disp('=== Pose Individuality Analysis Results ===');
+fprintf('Threshold: %.0f%% dominance\n', individuality_analysis.threshold * 100);
+fprintf('Total clusters analyzed: %d\n', total_clusters_analyzed);
+fprintf('Individual clusters: %d (%.1f%%)\n', total_individual_clusters, overall_individuality_percentage);
+fprintf('Shared clusters: %d (%.1f%%)\n', total_clusters_analyzed - total_individual_clusters, ...
+    100 - overall_individuality_percentage);
+disp(' ');
+disp('Per-animal individuality:');
+disp(individuality_table);
+
+% Save individuality table if export is enabled
+if do_export
+    individuality_filename = fullfile(export_folder, 'pose_individuality_analysis.csv');
+    writetable(individuality_table, individuality_filename);
+    logger(sprintf('Saved individuality analysis table: %s', individuality_filename), 'INFO');
+end
+
 %% Save analysis results
 analysis_filename = fullfile(export_folder, 'tsne_control_vs_baseline_analysis.mat');
-save(analysis_filename, 'diff_struct', 'summary_table', 'per_animal_analysis', 'proportion_analysis', 'conditions_to_compare');
-logger(sprintf('Saved control vs baseline analysis results: %s', analysis_filename), 'INFO');
+%save(analysis_filename, 'diff_struct', 'summary_table', 'per_animal_analysis', 'proportion_analysis', 'conditions_to_compare', 'individuality_analysis');
+%logger(sprintf('Saved control vs baseline analysis results: %s', analysis_filename), 'INFO');
 
 logger('Control vs baseline t-SNE difference analysis completed', 'INFO');
