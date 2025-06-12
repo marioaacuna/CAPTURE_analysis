@@ -46,7 +46,8 @@
 %    - Dominance Calculation: Identify dominant animal per cluster (highest frame count)
 %    - Individual Threshold Application: Mark clusters with ≥80% single-animal dominance
 %    - Per-Animal Statistics: Count individual vs. shared clusters for each animal
-%    - Uses global cluster assignments but filters by selected condition
+%    - CRITICAL: Uses GLOBAL data (all animals, all conditions) for individuality calculation
+%    - This prevents inflation of individuality scores in sparse conditions
 %
 % 4. Advanced Visualizations
 %    - Individual Cluster Maps: Highlight unique behaviors per animal on global t-SNE space
@@ -60,10 +61,10 @@
 %    - Export results to CSV files for external analysis
 %
 % OUTPUT METRICS:
-% - Individual_Clusters: Number of clusters where animal shows ≥80% dominance
-% - Total_Clusters_Present: Total clusters where animal appears (any percentage)
-% - Total_Dominant_Clusters: Clusters where animal is the most frequent
-% - Individuality_Percentage: (Individual_Clusters / Total_Clusters_Present) × 100
+% - Individual_Clusters_Global: Number of clusters where animal shows ≥80% dominance (globally)
+% - Total_Clusters_Present_Global: Total clusters where animal appears globally (any percentage)
+% - Total_Dominant_Clusters_Global: Clusters where animal is the most frequent globally
+% - Individuality_Percentage_Global: (Individual_Clusters_Global / Total_Clusters_Present_Global) × 100
 %
 % BIOLOGICAL INTERPRETATION:
 % High individuality percentage indicates an animal has many unique behavioral 
@@ -73,10 +74,12 @@
 % - Common vs. rare behavioral patterns in the population
 % - Behavioral diversity and specialization within groups
 %
-% IMPORTANT: Individuality is calculated using the GLOBAL t-SNE embedding space
-% (all animals, all conditions) as reference, ensuring consistent interpretation
-% across different experimental conditions. This prevents inflation of individuality
-% scores in conditions with fewer animals or limited behavioral repertoires.
+% IMPORTANT: Individuality is calculated using the GLOBAL dataset (all animals, all 
+% conditions) as reference, ensuring unbiased interpretation across different 
+% experimental conditions. This prevents inflation of individuality scores in 
+% conditions with fewer animals or limited behavioral repertoires. While 
+% visualizations focus on the selected condition, the individuality metrics 
+% reflect true behavioral uniqueness in the context of the complete experiment.
 %
 % CONFIGURATION OPTIONS:
 % - individuality_threshold: Dominance threshold for individual classification (default: 0.8)
@@ -354,49 +357,57 @@ if do_export
     exportgraphics(fig_individual, fullfile(export_folder, [export_name '.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
 end
 
-%% Individuality Analysis - Analyze cluster dominance by individual animals
+%% Individuality Analysis - Analyze cluster dominance by individual animals using GLOBAL data
 logger('Starting individuality analysis - evaluating pose uniqueness per animal', 'INFO');
-logger('NOTE: Using GLOBAL t-SNE coordinates for consistent individuality assessment across conditions', 'INFO');
+logger('NOTE: Using GLOBAL data (all conditions, all animals) for robust individuality assessment', 'INFO');
 
 % Define individuality threshold (80% of frames in a cluster belong to one animal)
 individuality_threshold = 0.8;
 
-% Get cluster assignments for selected condition frames only, but use GLOBAL t-SNE coordinates
-% This ensures consistent behavioral space reference across all conditions
-cluster_assignments = analysisstruct.annot_reordered{end,end}; % Final cluster assignments (GLOBAL)
-condition_cluster_assignments = cluster_assignments(idx_condition); % Filter for selected condition
-unique_clusters = unique(condition_cluster_assignments);
+% Use GLOBAL cluster assignments and animal names for individuality calculation
+% This ensures unbiased assessment across all experimental conditions
+cluster_assignments = analysisstruct.annot_reordered{end,end}; % Final cluster assignments (ALL FRAMES)
+global_animal_names = animal_names; % All animal names from all conditions
+unique_clusters = unique(cluster_assignments);
 unique_clusters = unique_clusters(unique_clusters > 0); % Remove background/noise clusters
 
-logger(sprintf('Found %d unique clusters in %s condition for individuality analysis', ...
-    length(unique_clusters), selected_condition_name), 'INFO');
-logger(sprintf('Using global t-SNE embedding (%d total frames) as reference space', size(analysisstruct.zValues, 1)), 'INFO');
+logger(sprintf('Found %d unique clusters in GLOBAL dataset for individuality analysis', length(unique_clusters)), 'INFO');
+logger(sprintf('Using global dataset: %d total frames, %d unique animals across all conditions', ...
+    length(cluster_assignments), length(unique(global_animal_names))), 'INFO');
+
+% Filter for animals present in the selected condition for reporting
+global_unique_animals = unique(global_animal_names);
+condition_unique_animals = unique_animals; % Animals in selected condition
+
+logger(sprintf('Selected condition (%s) contains %d/%d animals from global dataset', ...
+    selected_condition_name, length(condition_unique_animals), length(global_unique_animals)), 'INFO');
 
 % Initialize individuality analysis structure
 individuality_analysis = struct();
 individuality_analysis.threshold = individuality_threshold;
-individuality_analysis.unique_animals = unique_animals;
+individuality_analysis.unique_animals = condition_unique_animals; % Animals in selected condition
+individuality_analysis.global_unique_animals = global_unique_animals; % All animals globally
 individuality_analysis.cluster_ids = unique_clusters;
 
-% For each cluster, calculate animal composition (selected condition frames only)
+% For each cluster, calculate animal composition using GLOBAL dataset (all conditions)
 cluster_animal_composition = cell(length(unique_clusters), 1);
 cluster_dominant_animal = cell(length(unique_clusters), 1);
 cluster_dominance_percentage = zeros(length(unique_clusters), 1);
 cluster_is_individual = false(length(unique_clusters), 1);
 
-logger('Analyzing cluster composition for each animal...', 'INFO');
+logger('Analyzing cluster composition using GLOBAL dataset (all conditions, all animals)...', 'INFO');
 
 for c_idx = 1:length(unique_clusters)
     cluster_id = unique_clusters(c_idx);
-    cluster_frames = condition_cluster_assignments == cluster_id;
+    cluster_frames = cluster_assignments == cluster_id; % Use GLOBAL cluster assignments
     
-    % Count frames per animal in this cluster
+    % Count frames per animal in this cluster (GLOBAL dataset)
     animal_frame_counts = containers.Map();
     total_frames_in_cluster = sum(cluster_frames);
     
-    for i = 1:length(condition_animal_names)
+    for i = 1:length(global_animal_names)
         if cluster_frames(i)
-            animal_id = condition_animal_names{i};
+            animal_id = global_animal_names{i};
             if isKey(animal_frame_counts, animal_id)
                 animal_frame_counts(animal_id) = animal_frame_counts(animal_id) + 1;
             else
@@ -441,20 +452,22 @@ individuality_analysis.cluster_dominant_animal = cluster_dominant_animal;
 individuality_analysis.cluster_dominance_percentage = cluster_dominance_percentage;
 individuality_analysis.cluster_is_individual = cluster_is_individual;
 
-% Calculate summary statistics
+% Calculate summary statistics based on GLOBAL individuality analysis
 total_clusters_analyzed = sum(cluster_dominance_percentage > 0);
 individual_clusters = sum(cluster_is_individual);
 individual_percentage = (individual_clusters / total_clusters_analyzed) * 100;
 
-logger(sprintf('Individuality Summary: %d/%d clusters (%.1f%%) show individual dominance (>%.0f%%)', ...
+logger(sprintf('GLOBAL Individuality Summary: %d/%d clusters (%.1f%%) show individual dominance (>%.0f%%)', ...
     individual_clusters, total_clusters_analyzed, individual_percentage, individuality_threshold*100), 'INFO');
+logger(sprintf('This analysis includes %d total animals across all experimental conditions', ...
+    length(global_unique_animals)), 'INFO');
 
-% Per-animal individuality statistics
+% Per-animal individuality statistics using GLOBAL data
 animal_individual_clusters = containers.Map();
 animal_total_clusters_present = containers.Map();
 animal_total_dominant_clusters = containers.Map();
 
-% First, count all clusters where each animal appears (not just dominant)
+% First, count all clusters where each animal appears globally (not just dominant)
 for c_idx = 1:length(unique_clusters)
     if ~isempty(cluster_animal_composition{c_idx})
         composition = cluster_animal_composition{c_idx};
@@ -466,7 +479,7 @@ for c_idx = 1:length(unique_clusters)
             % Extract animal ID by removing 'ID_' prefix
             animal_id = field_name(4:end); % Remove 'ID_' prefix
             
-            % Count total clusters where this animal appears
+            % Count total clusters where this animal appears globally
             if isKey(animal_total_clusters_present, animal_id)
                 animal_total_clusters_present(animal_id) = animal_total_clusters_present(animal_id) + 1;
             else
@@ -476,19 +489,19 @@ for c_idx = 1:length(unique_clusters)
     end
 end
 
-% Count individual and dominant clusters per animal
+% Count individual and dominant clusters per animal (global analysis)
 for c_idx = 1:length(unique_clusters)
     if ~strcmp(cluster_dominant_animal{c_idx}, 'None')
         animal_id = cluster_dominant_animal{c_idx};
         
-        % Count total dominant clusters per animal (keep for reference)
+        % Count total dominant clusters per animal globally
         if isKey(animal_total_dominant_clusters, animal_id)
             animal_total_dominant_clusters(animal_id) = animal_total_dominant_clusters(animal_id) + 1;
         else
             animal_total_dominant_clusters(animal_id) = 1;
         end
         
-        % Count individual clusters per animal
+        % Count individual clusters per animal globally
         if cluster_is_individual(c_idx)
             if isKey(animal_individual_clusters, animal_id)
                 animal_individual_clusters(animal_id) = animal_individual_clusters(animal_id) + 1;
@@ -507,7 +520,7 @@ individuality_analysis.animal_total_dominant_clusters = animal_total_dominant_cl
 %% Create individuality visualization functions
 
 function plot_individuality_tsne_map_condition(analysisstruct, individuality_data, condition_idx, visualize, condition_name)
-    % Create figure showing individual clusters on t-SNE map using GLOBAL coordinates
+    % Create figure showing individual clusters on t-SNE map using GLOBAL individuality analysis
     fig = figure('Name', 'Individuality Analysis: t-SNE Maps', 'Visible', visualize);
     set(fig, 'Position', [300, 100, 1400, 800]);
     set(fig, 'Color', 'w');
@@ -531,11 +544,11 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
     plot(condition_zvals(:,1), condition_zvals(:,2), '.', ...
         'Color', [0.7, 0.7, 0.7], 'MarkerSize', 2);
     
-    % Highlight individual clusters from selected condition
+    % Highlight individual clusters from selected condition (based on GLOBAL individuality)
     for c_idx = 1:length(individuality_data.cluster_ids)
         if individuality_data.cluster_is_individual(c_idx)
             cluster_id = individuality_data.cluster_ids(c_idx);
-            % Find frames in the selected condition that belong to this cluster
+            % Find frames in the selected condition that belong to this globally individual cluster
             cluster_frames = condition_clusters == cluster_id;
             if sum(cluster_frames) > 0
                 plot(condition_zvals(cluster_frames,1), ...
@@ -545,13 +558,13 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
         end
     end
     
-    title(sprintf('Individual Clusters (>%d%% dominance) - %s', individuality_data.threshold*100, condition_name));
+    title(sprintf('Globally Individual Clusters (>%d%% dominance) in %s', individuality_data.threshold*100, condition_name));
     xlabel('t-SNE 1 (Global Space)');
     ylabel('t-SNE 2 (Global Space)');
     axis equal;
-    legend({'All data (background)', sprintf('%s condition', condition_name), 'Individual clusters'}, 'Location', 'best');
+    legend({'All data (global)', sprintf('%s condition', condition_name), 'Globally individual clusters'}, 'Location', 'best');
     
-    % Subplot 2: Dominance percentage heatmap
+    % Subplot 2: Dominance percentage heatmap (global dominance values)
     subplot(1, 2, 2);
     
     % Plot global background
@@ -559,7 +572,7 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
         'Color', [0.95, 0.95, 0.95], 'MarkerSize', 1);
     hold on;
     
-    % Create a colormap based on dominance percentage for condition data
+    % Create a colormap based on GLOBAL dominance percentage for condition data
     dominance_values = zeros(size(condition_zvals, 1), 1);
     
     for c_idx = 1:length(individuality_data.cluster_ids)
@@ -568,7 +581,7 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
         dominance_values(cluster_frames) = individuality_data.cluster_dominance_percentage(c_idx);
     end
     
-    % Create scatter plot colored by dominance (only for condition data)
+    % Create scatter plot colored by global dominance (only for condition data)
     scatter(condition_zvals(:,1), condition_zvals(:,2), 12, dominance_values, 'filled');
     
     % Set colormap and colorbar
@@ -576,14 +589,14 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
     colorbar;
     caxis([0, 1]);
     
-    title(sprintf('Cluster Dominance Percentage - %s', condition_name));
+    title(sprintf('Global Dominance Percentage - %s', condition_name));
     xlabel('t-SNE 1 (Global Space)');
     ylabel('t-SNE 2 (Global Space)');
     axis equal;
     
     % Add main title
-    sgtitle(sprintf('Pose Individuality Analysis - %s (n=%d animals, %d clusters, Global t-SNE Reference)', ...
-        condition_name, length(individuality_data.unique_animals), length(individuality_data.cluster_ids)), ...
+    sgtitle(sprintf('Pose Individuality Analysis - %s (Global Analysis: %d animals, %d clusters)', ...
+        condition_name, length(individuality_data.global_unique_animals), length(individuality_data.cluster_ids)), ...
         'FontSize', 16, 'FontWeight', 'bold');
 end
 
@@ -649,7 +662,7 @@ function plot_individuality_per_animal_condition(analysisstruct, individuality_d
         axis tight;
     end
     
-    sgtitle(sprintf('Individual Clusters per Animal - %s (Global t-SNE Reference)', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
+    sgtitle(sprintf('Individual Clusters per Animal - %s (Global Individuality Analysis)', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
 end
 
 function plot_individuality_statistics_condition(individuality_data, visualize, export_folder, do_export, condition_name)
@@ -758,7 +771,7 @@ function plot_individuality_statistics_condition(individuality_data, visualize, 
     set(gca, 'TickDir', 'out');
     xtickangle(45);
     
-    sgtitle(sprintf('Pose Individuality Statistical Analysis - %s', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
+    sgtitle(sprintf('Pose Individuality Statistical Analysis - %s (Global Analysis)', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
     
     % Export if requested
     if do_export
@@ -781,11 +794,12 @@ plot_individuality_per_animal_condition(analysisstruct, individuality_analysis, 
 plot_individuality_statistics_condition(individuality_analysis, visualize, export_folder, do_export, selected_condition_name);
 
 %% Create individuality summary table
-logger(sprintf('Creating individuality summary table for %s data', selected_condition_name), 'INFO');
+logger(sprintf('Creating individuality summary table for %s animals (using global individuality metrics)', selected_condition_name), 'INFO');
 
-% Create detailed summary table
+% Create detailed summary table focusing on animals in selected condition
+% but using their GLOBAL individuality metrics
 individuality_table = table();
-animal_ids = individuality_analysis.unique_animals;
+animal_ids = individuality_analysis.unique_animals; % Animals in selected condition
 individual_cluster_counts = zeros(length(animal_ids), 1);
 total_present_cluster_counts = zeros(length(animal_ids), 1);
 total_dominant_cluster_counts = zeros(length(animal_ids), 1);
@@ -794,32 +808,32 @@ individuality_percentages = zeros(length(animal_ids), 1);
 for i = 1:length(animal_ids)
     animal_id = animal_ids{i};
     
-    % Get individual cluster count
+    % Get GLOBAL individual cluster count for this animal
     if isKey(individuality_analysis.animal_individual_clusters, animal_id)
         individual_cluster_counts(i) = individuality_analysis.animal_individual_clusters(animal_id);
     end
     
-    % Get total clusters present count (NEW METRIC)
+    % Get GLOBAL total clusters present count for this animal
     if isKey(individuality_analysis.animal_total_clusters_present, animal_id)
         total_present_cluster_counts(i) = individuality_analysis.animal_total_clusters_present(animal_id);
     end
     
-    % Get total dominant cluster count (keep for reference)
+    % Get GLOBAL total dominant cluster count for this animal
     if isKey(individuality_analysis.animal_total_dominant_clusters, animal_id)
         total_dominant_cluster_counts(i) = individuality_analysis.animal_total_dominant_clusters(animal_id);
     end
     
-    % Calculate individuality percentage using TOTAL CLUSTERS PRESENT (not just dominant)
+    % Calculate GLOBAL individuality percentage
     if total_present_cluster_counts(i) > 0
         individuality_percentages(i) = (individual_cluster_counts(i) / total_present_cluster_counts(i)) * 100;
     end
 end
 
 individuality_table.Animal_ID = animal_ids;
-individuality_table.Individual_Clusters = individual_cluster_counts;
-individuality_table.Total_Clusters_Present = total_present_cluster_counts;
-individuality_table.Total_Dominant_Clusters = total_dominant_cluster_counts;
-individuality_table.Individuality_Percentage = individuality_percentages;
+individuality_table.Individual_Clusters_Global = individual_cluster_counts;
+individuality_table.Total_Clusters_Present_Global = total_present_cluster_counts;
+individuality_table.Total_Dominant_Clusters_Global = total_dominant_cluster_counts;
+individuality_table.Individuality_Percentage_Global = individuality_percentages;
 
 % Add overall statistics
 total_clusters_analyzed = length(individuality_analysis.cluster_ids);
@@ -828,15 +842,17 @@ overall_individuality_percentage = (total_individual_clusters / total_clusters_a
 
 % Save individuality table if export is enabled
 if do_export
-    individuality_filename = fullfile(export_folder, sprintf('%s_pose_individuality_analysis.csv', lower(selected_condition_name)));
+    individuality_filename = fullfile(export_folder, sprintf('%s_pose_individuality_analysis_global.csv', lower(selected_condition_name)));
     writetable(individuality_table, individuality_filename);
-    logger(sprintf('Saved %s individuality analysis table: %s', selected_condition_name, individuality_filename), 'INFO');
+    logger(sprintf('Saved %s individuality analysis table (global metrics): %s', selected_condition_name, individuality_filename), 'INFO');
 end
 
 %% Display summary statistics
 logger(sprintf('=== %s CONDITION SUMMARY ===', upper(selected_condition_name)), 'INFO');
 logger(sprintf('Total animals in %s condition: %d', selected_condition_name, num_animals), 'INFO');
 logger(sprintf('Total frames in %s condition: %d', selected_condition_name, sum(idx_condition)), 'INFO');
+logger(sprintf('NOTE: Individuality metrics calculated using GLOBAL dataset (%d animals, %d total frames)', ...
+    length(global_unique_animals), length(cluster_assignments)), 'INFO');
 
 for i = 1:num_animals
     animal = unique_animals{i};
@@ -847,14 +863,14 @@ for i = 1:num_animals
 end
 
 % Display individuality results
-logger('=== POSE INDIVIDUALITY ANALYSIS RESULTS ===', 'INFO');
+logger('=== POSE INDIVIDUALITY ANALYSIS RESULTS (GLOBAL) ===', 'INFO');
 logger(sprintf('Threshold: %.0f%% dominance', individuality_analysis.threshold * 100), 'INFO');
-logger(sprintf('Total clusters analyzed: %d', total_clusters_analyzed), 'INFO');
-logger(sprintf('Individual clusters: %d (%.1f%%)', total_individual_clusters, overall_individuality_percentage), 'INFO');
-logger(sprintf('Shared clusters: %d (%.1f%%)', total_clusters_analyzed - total_individual_clusters, ...
+logger(sprintf('Total clusters analyzed (global): %d', total_clusters_analyzed), 'INFO');
+logger(sprintf('Individual clusters (global): %d (%.1f%%)', total_individual_clusters, overall_individuality_percentage), 'INFO');
+logger(sprintf('Shared clusters (global): %d (%.1f%%)', total_clusters_analyzed - total_individual_clusters, ...
     100 - overall_individuality_percentage), 'INFO');
 logger(' ', 'INFO');
-logger('Per-animal individuality:', 'INFO');
+logger(sprintf('Per-animal individuality for %s condition (based on global analysis):', selected_condition_name), 'INFO');
 disp(individuality_table);
 
-logger(sprintf('%s per animal analysis with individuality assessment complete', selected_condition_name), 'INFO');
+logger(sprintf('%s analysis complete - individuality assessed using global dataset for robust metrics', selected_condition_name), 'INFO');
