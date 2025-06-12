@@ -33,22 +33,26 @@
 %    - User selects condition to analyze (B, S, F, H, N) via dialog
 %    - Filter for selected condition frames only
 %    - Extract unique animal IDs and generate color mappings
+%    - IMPORTANT: Uses GLOBAL t-SNE coordinates as reference space for consistency
 %
 % 2. Basic Visualization Generation
 %    - Density maps: Kernel density estimation for each animal's behavioral space
 %    - Scatter plots: Combined and individual animal t-SNE projections
 %    - Color-coded visualization showing spatial distribution of behaviors
+%    - All visualizations use global t-SNE space with condition data highlighted
 %
 % 3. Individuality Analysis
 %    - Cluster Composition Analysis: Calculate animal representation in each cluster
 %    - Dominance Calculation: Identify dominant animal per cluster (highest frame count)
 %    - Individual Threshold Application: Mark clusters with ≥80% single-animal dominance
 %    - Per-Animal Statistics: Count individual vs. shared clusters for each animal
+%    - Uses global cluster assignments but filters by selected condition
 %
 % 4. Advanced Visualizations
-%    - Individual Cluster Maps: Highlight unique behaviors per animal on t-SNE space
+%    - Individual Cluster Maps: Highlight unique behaviors per animal on global t-SNE space
 %    - Dominance Heatmaps: Color-code points by dominance percentage
 %    - Statistical Plots: Pie charts, histograms, and bar charts of individuality metrics
+%    - Global context maintained for consistent interpretation across conditions
 %
 % 5. Quantitative Output
 %    - Summary tables with per-animal individuality percentages
@@ -68,6 +72,11 @@
 % - Animals with distinctive behavioral signatures
 % - Common vs. rare behavioral patterns in the population
 % - Behavioral diversity and specialization within groups
+%
+% IMPORTANT: Individuality is calculated using the GLOBAL t-SNE embedding space
+% (all animals, all conditions) as reference, ensuring consistent interpretation
+% across different experimental conditions. This prevents inflation of individuality
+% scores in conditions with fewer animals or limited behavioral repertoires.
 %
 % CONFIGURATION OPTIONS:
 % - individuality_threshold: Dominance threshold for individual classification (default: 0.8)
@@ -124,7 +133,7 @@ rootpath = GC.preprocessing_rootpath;
 %% User Input Dialog for Condition and Debug Mode Selection
 % Available conditions
 available_conditions = {'B', 'S', 'F', 'H', 'N'};
-condition_names = {'Baseline', 'Sham', 'Formalin', 'Sham', 'Neuropathic'};
+condition_names = {'Baseline', 'Saline', 'Formalin', 'Sham', 'Neuropathic'};
 
 % Create condition selection dialog
 [condition_idx, ok] = listdlg('PromptString', 'Select condition to analyze:', ...
@@ -233,13 +242,17 @@ zvals = analysisstruct.zValues;
 
 %% Create density maps for each animal in selected condition
 logger(sprintf('Creating density maps for each animal in %s condition', selected_condition_name), 'INFO');
+logger('NOTE: Using global t-SNE coordinate space for consistent density estimation', 'INFO');
 
 % Calculate subplot layout
 n_cols = ceil(sqrt(num_animals));
 n_rows = ceil(num_animals / n_cols);
 
-fig_density = figure('Name', sprintf('Density Maps: %s per Animal', selected_condition_name), 'Color', 'w', ...
+fig_density = figure('Name', sprintf('Density Maps: %s per Animal (Global Reference)', selected_condition_name), 'Color', 'w', ...
     'Position', [100, 100, 300*n_cols, 300*n_rows], 'Visible', visualize);
+
+% Use global t-SNE parameters for consistent density estimation
+global_zvals = analysisstruct.zValues; % Global coordinates for reference
 
 for i = 1:num_animals
     animal = unique_animals{i};
@@ -250,8 +263,9 @@ for i = 1:num_animals
     set(h_ax, 'Color', 'w');
     
     if sum(idx_animal) > 0  % Check if animal has data points
+        % Use global coordinate range for density map limits
         plotdensitymaps({condition_zvals(idx_animal,:)}, 1, h_ax, analysisstruct.params.density_width, ...
-            max(analysisstruct.zValues(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
+            max(global_zvals(:))*analysisstruct.params.expansion_factor, analysisstruct.params.density_res);
     end
     
     title(['Animal: ' animal]);
@@ -269,9 +283,14 @@ end
 
 %% Create combined scatter plot with all animals in selected condition
 logger(sprintf('Creating combined scatter plot for all animals in %s condition', selected_condition_name), 'INFO');
+logger('NOTE: Showing condition data within global t-SNE coordinate space', 'INFO');
 
-fig_scatter = figure('Name', sprintf('Scatter Plot: %s All Animals', selected_condition_name), 'Color', 'w', 'Visible', visualize);
+fig_scatter = figure('Name', sprintf('Scatter Plot: %s All Animals (Global Reference)', selected_condition_name), 'Color', 'w', 'Visible', visualize);
 hold on;
+
+% Plot global background data in very light gray
+global_zvals = analysisstruct.zValues;
+plot(global_zvals(:,1), global_zvals(:,2), '.', 'Color', [0.95, 0.95, 0.95], 'MarkerSize', 1);
 
 % Plot each animal with its specific color
 for i = 1:num_animals
@@ -279,7 +298,7 @@ for i = 1:num_animals
     idx_animal = strcmp(condition_animal_names, animal);
     
     if sum(idx_animal) > 0  % Check if animal has data points
-        scatter(condition_zvals(idx_animal,1), condition_zvals(idx_animal,2), 10, ...
+        scatter(condition_zvals(idx_animal,1), condition_zvals(idx_animal,2), 15, ...
             animal_color_map(animal), 'Marker', '.', 'DisplayName', animal);
         
         logger(['Added scatter points for animal: ' animal ' (' num2str(sum(idx_animal)) ' frames)'], 'INFO');
@@ -288,9 +307,9 @@ end
 
 hold off;
 legend('Location', 'best');
-title(sprintf('%s Condition t-SNE Map - All Animals', selected_condition_name));
-xlabel('t-SNE Dimension 1');
-ylabel('t-SNE Dimension 2');
+title(sprintf('%s Condition t-SNE Map - All Animals (Global Reference)', selected_condition_name));
+xlabel('t-SNE Dimension 1 (Global Space)');
+ylabel('t-SNE Dimension 2 (Global Space)');
 axis equal tight;
 
 % Export the scatter figure if needed
@@ -304,7 +323,7 @@ end
 logger('Creating individual scatter plots for each animal', 'INFO');
 
 % Calculate subplot layout for individual plots
-fig_individual = figure('Name', sprintf('Individual Scatter Plots: %s per Animal', selected_condition_name), 'Color', 'w', ...
+fig_individual = figure('Name', sprintf('Individual Scatter Plots: %s per Animal (Global Reference)', selected_condition_name), 'Color', 'w', ...
     'Position', [200, 200, 300*n_cols, 300*n_rows], 'Visible', visualize);
 
 for i = 1:num_animals
@@ -313,14 +332,18 @@ for i = 1:num_animals
     
     subplot(n_rows, n_cols, i);
     
+    % Plot global background in very light gray
+    plot(global_zvals(:,1), global_zvals(:,2), '.', 'Color', [0.95, 0.95, 0.95], 'MarkerSize', 0.5);
+    hold on;
+    
     if sum(idx_animal) > 0  % Check if animal has data points
-        scatter(condition_zvals(idx_animal,1), condition_zvals(idx_animal,2), 10, ...
+        scatter(condition_zvals(idx_animal,1), condition_zvals(idx_animal,2), 15, ...
             animal_color_map(animal), 'Marker', '.');
     end
     
     title(['Animal: ' animal]);
-    xlabel('t-SNE Dimension 1');
-    ylabel('t-SNE Dimension 2');
+    xlabel('t-SNE Dimension 1 (Global)');
+    ylabel('t-SNE Dimension 2 (Global)');
     axis equal tight;
 end
 
@@ -333,18 +356,21 @@ end
 
 %% Individuality Analysis - Analyze cluster dominance by individual animals
 logger('Starting individuality analysis - evaluating pose uniqueness per animal', 'INFO');
+logger('NOTE: Using GLOBAL t-SNE coordinates for consistent individuality assessment across conditions', 'INFO');
 
 % Define individuality threshold (80% of frames in a cluster belong to one animal)
 individuality_threshold = 0.8;
 
-% Get cluster assignments for selected condition frames only
-cluster_assignments = analysisstruct.annot_reordered{end,end}; % Final cluster assignments
-condition_cluster_assignments = cluster_assignments(idx_condition);
+% Get cluster assignments for selected condition frames only, but use GLOBAL t-SNE coordinates
+% This ensures consistent behavioral space reference across all conditions
+cluster_assignments = analysisstruct.annot_reordered{end,end}; % Final cluster assignments (GLOBAL)
+condition_cluster_assignments = cluster_assignments(idx_condition); % Filter for selected condition
 unique_clusters = unique(condition_cluster_assignments);
 unique_clusters = unique_clusters(unique_clusters > 0); % Remove background/noise clusters
 
 logger(sprintf('Found %d unique clusters in %s condition for individuality analysis', ...
     length(unique_clusters), selected_condition_name), 'INFO');
+logger(sprintf('Using global t-SNE embedding (%d total frames) as reference space', size(analysisstruct.zValues, 1)), 'INFO');
 
 % Initialize individuality analysis structure
 individuality_analysis = struct();
@@ -481,25 +507,35 @@ individuality_analysis.animal_total_dominant_clusters = animal_total_dominant_cl
 %% Create individuality visualization functions
 
 function plot_individuality_tsne_map_condition(analysisstruct, individuality_data, condition_idx, visualize, condition_name)
-    % Create figure showing individual clusters on t-SNE map (selected condition only)
+    % Create figure showing individual clusters on t-SNE map using GLOBAL coordinates
     fig = figure('Name', 'Individuality Analysis: t-SNE Maps', 'Visible', visualize);
     set(fig, 'Position', [300, 100, 1400, 800]);
     set(fig, 'Color', 'w');
     
-    % Get condition data
-    condition_zvals = analysisstruct.zValues(condition_idx, :);
-    condition_clusters = analysisstruct.annot_reordered{end,end}(condition_idx);
+    % Get GLOBAL t-SNE data for reference (all conditions, all animals)
+    global_zvals = analysisstruct.zValues;
+    global_clusters = analysisstruct.annot_reordered{end,end};
+    
+    % Get condition-specific data for highlighting
+    condition_zvals = global_zvals(condition_idx, :);
+    condition_clusters = global_clusters(condition_idx);
     
     % Subplot 1: Individual vs non-individual clusters
     subplot(1, 2, 1);
-    plot(condition_zvals(:,1), condition_zvals(:,2), '.', ...
-        'Color', [0.9, 0.9, 0.9], 'MarkerSize', 2);
+    % Plot ALL global data in light gray as background
+    plot(global_zvals(:,1), global_zvals(:,2), '.', ...
+        'Color', [0.95, 0.95, 0.95], 'MarkerSize', 1);
     hold on;
     
-    % Highlight individual clusters
+    % Plot selected condition data in gray
+    plot(condition_zvals(:,1), condition_zvals(:,2), '.', ...
+        'Color', [0.7, 0.7, 0.7], 'MarkerSize', 2);
+    
+    % Highlight individual clusters from selected condition
     for c_idx = 1:length(individuality_data.cluster_ids)
         if individuality_data.cluster_is_individual(c_idx)
             cluster_id = individuality_data.cluster_ids(c_idx);
+            % Find frames in the selected condition that belong to this cluster
             cluster_frames = condition_clusters == cluster_id;
             if sum(cluster_frames) > 0
                 plot(condition_zvals(cluster_frames,1), ...
@@ -509,16 +545,21 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
         end
     end
     
-    title(sprintf('Individual Clusters (>%d%% dominance)', individuality_data.threshold*100));
-    xlabel('t-SNE 1');
-    ylabel('t-SNE 2');
+    title(sprintf('Individual Clusters (>%d%% dominance) - %s', individuality_data.threshold*100, condition_name));
+    xlabel('t-SNE 1 (Global Space)');
+    ylabel('t-SNE 2 (Global Space)');
     axis equal;
-    legend({'All clusters', 'Individual clusters'}, 'Location', 'best');
+    legend({'All data (background)', sprintf('%s condition', condition_name), 'Individual clusters'}, 'Location', 'best');
     
     % Subplot 2: Dominance percentage heatmap
     subplot(1, 2, 2);
     
-    % Create a colormap based on dominance percentage
+    % Plot global background
+    plot(global_zvals(:,1), global_zvals(:,2), '.', ...
+        'Color', [0.95, 0.95, 0.95], 'MarkerSize', 1);
+    hold on;
+    
+    % Create a colormap based on dominance percentage for condition data
     dominance_values = zeros(size(condition_zvals, 1), 1);
     
     for c_idx = 1:length(individuality_data.cluster_ids)
@@ -527,7 +568,7 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
         dominance_values(cluster_frames) = individuality_data.cluster_dominance_percentage(c_idx);
     end
     
-    % Create scatter plot colored by dominance
+    % Create scatter plot colored by dominance (only for condition data)
     scatter(condition_zvals(:,1), condition_zvals(:,2), 12, dominance_values, 'filled');
     
     % Set colormap and colorbar
@@ -535,25 +576,29 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
     colorbar;
     caxis([0, 1]);
     
-    title('Cluster Dominance Percentage');
-    xlabel('t-SNE 1');
-    ylabel('t-SNE 2');
+    title(sprintf('Cluster Dominance Percentage - %s', condition_name));
+    xlabel('t-SNE 1 (Global Space)');
+    ylabel('t-SNE 2 (Global Space)');
     axis equal;
     
     % Add main title
-    sgtitle(sprintf('Pose Individuality Analysis - %s (n=%d animals, %d clusters)', ...
+    sgtitle(sprintf('Pose Individuality Analysis - %s (n=%d animals, %d clusters, Global t-SNE Reference)', ...
         condition_name, length(individuality_data.unique_animals), length(individuality_data.cluster_ids)), ...
         'FontSize', 16, 'FontWeight', 'bold');
 end
 
 function plot_individuality_per_animal_condition(analysisstruct, individuality_data, condition_idx, ~, visualize, condition_name)
-    % Create figure showing individual clusters for each animal separately
+    % Create figure showing individual clusters for each animal using GLOBAL t-SNE coordinates
     unique_animals = individuality_data.unique_animals;
     n_animals = length(unique_animals);
     
-    % Get condition data
-    condition_zvals = analysisstruct.zValues(condition_idx, :);
-    condition_clusters = analysisstruct.annot_reordered{end,end}(condition_idx);
+    % Get GLOBAL t-SNE data for reference
+    global_zvals = analysisstruct.zValues;
+    global_clusters = analysisstruct.annot_reordered{end,end};
+    
+    % Get condition-specific data
+    condition_zvals = global_zvals(condition_idx, :);
+    condition_clusters = global_clusters(condition_idx);
     
     % Create subplot grid
     n_cols = ceil(sqrt(n_animals));
@@ -568,10 +613,14 @@ function plot_individuality_per_animal_condition(analysisstruct, individuality_d
         
         subplot(n_rows, n_cols, a_idx);
         
-        % Plot all points in gray
-        plot(condition_zvals(:,1), condition_zvals(:,2), '.', ...
-            'Color', [0.9, 0.9, 0.9], 'MarkerSize', 1);
+        % Plot global background in very light gray
+        plot(global_zvals(:,1), global_zvals(:,2), '.', ...
+            'Color', [0.95, 0.95, 0.95], 'MarkerSize', 0.5);
         hold on;
+        
+        % Plot all condition points in gray
+        plot(condition_zvals(:,1), condition_zvals(:,2), '.', ...
+            'Color', [0.7, 0.7, 0.7], 'MarkerSize', 1);
         
         % Highlight clusters dominated by this animal
         for c_idx = 1:length(individuality_data.cluster_ids)
@@ -594,13 +643,13 @@ function plot_individuality_per_animal_condition(analysisstruct, individuality_d
         end
         
         title(sprintf('%s (%d individual)', animal_id, individual_count));
-        xlabel('t-SNE 1');
-        ylabel('t-SNE 2');
+        xlabel('t-SNE 1 (Global)');
+        ylabel('t-SNE 2 (Global)');
         axis equal;
         axis tight;
     end
     
-    sgtitle(sprintf('Individual Clusters per Animal - %s', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
+    sgtitle(sprintf('Individual Clusters per Animal - %s (Global t-SNE Reference)', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
 end
 
 function plot_individuality_statistics_condition(individuality_data, visualize, export_folder, do_export, condition_name)
