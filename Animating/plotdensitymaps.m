@@ -12,10 +12,10 @@ if nargin <5
     end
     density_max = max(max(density_max_arr))*1.3;
 end
-names_default={'Oranges9','Greens9','Reds9','Greens9','Reds9','Blues9','Greys9','Purples9','Purples9','Greys9'}
+names_default={'Oranges9','Greens9','Reds9','Greens9','Reds9','Blues9','Greys9','Purples9','Purples9','Greys9'};
 
 if nargin<7
-    names={'Oranges9','Greens9','Reds9','Greens9','Reds9','Blues9','Greys9','Purples9','Purples9','Greys9'}
+    names={'Oranges9','Greens9','Reds9','Greens9','Reds9','Blues9','Greys9','Purples9','Purples9','Greys9'};
     if numel(zValues)==1
         names={'Oranges5'};
     end
@@ -38,7 +38,7 @@ for ll =1:numel(zValues)
 
     %[xx,yy,density_maps{ll}] = findPointDensity_unnormJDM(tsnehere(:,:),...
     %   density_width,[density_res density_res],[-density_max density_max]);
-    fprintf('using unnorm')
+    fprintf('using unnorm\n')
     %findPointDensity_unnormJDM
     %%normalized version == looks weird atm
     [xx,yy,density_maps{ll}] = findPointDensity(tsnehere(:,:),...
@@ -76,7 +76,7 @@ for ll =1:numel(zValues)
         caxis([0 maxval])
         %caxis([min(density_maps{ll}(:)) max_density_maps])
     end
-    c=colorbar
+    c=colorbar;
     aa.CData = get(aa,'CData');
     %cmap=colormap(hh);
     c.Label.String = 'Probability Density';
