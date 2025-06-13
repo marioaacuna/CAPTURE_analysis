@@ -508,17 +508,20 @@ function create_condition_comparison_plots(condition_data, available_conditions,
     all_frame_vals = [];
     colors = lines(length(available_conditions));
     
+    % Create mapping between available conditions and condition labels
+    condition_label_idx = 1;
     for cond_idx = 1:length(available_conditions)
         condition = available_conditions{cond_idx};
         if length(condition_data.(condition).cluster_individuality) > 0
             cluster_vals = condition_data.(condition).cluster_individuality;
             frame_vals = condition_data.(condition).frame_individuality;
             
-            scatter(cluster_vals, frame_vals, 50, colors(cond_idx, :), 'filled', 'DisplayName', condition_labels{end+1-length(available_conditions)+cond_idx});
+            scatter(cluster_vals, frame_vals, 50, colors(cond_idx, :), 'filled', 'DisplayName', condition_labels{condition_label_idx});
             hold on;
             
             all_cluster_vals = [all_cluster_vals, cluster_vals];
             all_frame_vals = [all_frame_vals, frame_vals];
+            condition_label_idx = condition_label_idx + 1;
         end
     end
     
@@ -574,7 +577,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
         
         for animal_idx = 1:min(10, length(animals_multi_condition)) % Limit to 10 animals for clarity
             animal_id = animals_multi_condition{animal_idx};
-            cluster_vals = [];
+            frame_vals = [];
             condition_indices = [];
             
             for cond_idx = 1:length(available_conditions)
@@ -582,22 +585,34 @@ function create_condition_comparison_plots(condition_data, available_conditions,
                 animal_position = find(strcmp(condition_data.(condition).animal_ids, animal_id));
                 
                 if ~isempty(animal_position)
-                    cluster_vals(end+1) = condition_data.(condition).cluster_individuality(animal_position);
+                    frame_vals(end+1) = condition_data.(condition).frame_individuality(animal_position);
                     condition_indices(end+1) = cond_idx;
                 end
             end
             
-            if length(cluster_vals) > 1
-                plot(condition_indices, cluster_vals, 'o-', 'Color', colors(animal_idx, :), ...
+            if length(frame_vals) > 1
+                plot(condition_indices, frame_vals, 'o-', 'Color', colors(animal_idx, :), ...
                     'LineWidth', 2, 'MarkerSize', 6, 'DisplayName', animal_id);
                 hold on;
             end
         end
         
         set(gca, 'XTick', 1:length(available_conditions));
-        set(gca, 'XTickLabel', condition_labels);
-        ylabel('Cluster Individuality (%)');
-        title('Individual Animal Trajectories Across Conditions');
+        % Only set labels for conditions that have data
+        all_condition_labels = cell(1, length(available_conditions));
+        label_idx = 1;
+        for cond_idx = 1:length(available_conditions)
+            condition = available_conditions{cond_idx};
+            if length(condition_data.(condition).cluster_individuality) > 0
+                all_condition_labels{cond_idx} = condition_labels{label_idx};
+                label_idx = label_idx + 1;
+            else
+                all_condition_labels{cond_idx} = available_conditions{cond_idx};
+            end
+        end
+        set(gca, 'XTickLabel', all_condition_labels);
+        ylabel('Frame Individuality (%)');
+        title('Individual Animal Frame Individuality Trajectories Across Conditions');
         legend('Location', 'best');
         xtickangle(45);
     else
