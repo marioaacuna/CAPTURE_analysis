@@ -58,7 +58,7 @@ available_conditions = {'B', 'S', 'F', 'H', 'N'};
 condition_names = {'Baseline', 'Saline', 'Formalin', 'Sham', 'Neuropathic'};
 
 % Configuration
-individuality_threshold = 0.8;  % 80% dominance threshold
+individuality_threshold = 0.80;  % 80% dominance threshold
 visualize = 'on';  % Show figures
 do_export = true;  % Export results
 
@@ -472,7 +472,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
     hold on;
     errorbar(1:length(means_cluster), means_cluster, sems_cluster, 'k', 'LineStyle', 'none', 'LineWidth', 1.5);
     
-    set(gca, 'XTickLabel', condition_labels);
+    set(gca, 'XTickLabel', condition_labels, 'TickDir', 'out');
     ylabel('Cluster Individuality (%)');
     title('Cluster Individuality Across Conditions');
     xtickangle(45);
@@ -490,7 +490,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
     hold on;
     errorbar(1:length(means_frame), means_frame, sems_frame, 'k', 'LineStyle', 'none', 'LineWidth', 1.5);
     
-    set(gca, 'XTickLabel', condition_labels);
+    set(gca, 'XTickLabel', condition_labels, 'TickDir', 'out');
     ylabel('Frame Individuality (%)');
     title('Frame Individuality Across Conditions');
     xtickangle(45);
@@ -525,6 +525,30 @@ function create_condition_comparison_plots(condition_data, available_conditions,
         end
     end
     
+    % Add mean points with error bars for each condition
+    condition_label_idx = 1;
+    for cond_idx = 1:length(available_conditions)
+        condition = available_conditions{cond_idx};
+        if length(condition_data.(condition).cluster_individuality) > 0
+            cluster_vals = condition_data.(condition).cluster_individuality;
+            frame_vals = condition_data.(condition).frame_individuality;
+            
+            % Calculate means and SEMs
+            mean_cluster = mean(cluster_vals);
+            mean_frame = mean(frame_vals);
+            sem_cluster = std(cluster_vals) / sqrt(length(cluster_vals));
+            sem_frame = std(frame_vals) / sqrt(length(frame_vals));
+            
+            % Plot mean point with error bars
+            errorbar(mean_cluster, mean_frame, sem_frame, sem_frame, sem_cluster, sem_cluster, ...
+                'o', 'Color', colors(cond_idx, :), 'MarkerSize', 8, 'LineWidth', 2, ...
+                'MarkerFaceColor', colors(cond_idx, :), 'MarkerEdgeColor', 'k', ...
+                'HandleVisibility', 'off'); % Don't show in legend
+            
+            condition_label_idx = condition_label_idx + 1;
+        end
+    end
+    
     % Add correlation line if we have data
     if length(all_cluster_vals) > 2
         [rho, p_corr] = corr(all_cluster_vals', all_frame_vals');
@@ -540,6 +564,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
     xlabel('Cluster Individuality (%)');
     ylabel('Frame Individuality (%)');
     title('Cluster vs Frame Individuality');
+    set(gca, 'TickDir', 'out');
     legend('Location', 'best');
     
     % Subplot 4: Individual animal trajectories (if multiple conditions per animal)
@@ -597,7 +622,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
             end
         end
         
-        set(gca, 'XTick', 1:length(available_conditions));
+        set(gca, 'XTick', 1:length(available_conditions), 'TickDir', 'out');
         % Only set labels for conditions that have data
         all_condition_labels = cell(1, length(available_conditions));
         label_idx = 1;
@@ -663,6 +688,7 @@ if length(conditions_with_data) > 1
     boxplot(cluster_data_for_boxplot, cluster_group_labels);
     ylabel('Cluster Individuality (%)');
     title('Cluster Individuality Distribution by Condition');
+    set(gca, 'TickDir', 'out');
     
     % Add sample sizes
     for cond_idx = 1:length(conditions_with_data)
@@ -688,6 +714,7 @@ if length(conditions_with_data) > 1
     boxplot(frame_data_for_boxplot, frame_group_labels);
     ylabel('Frame Individuality (%)');
     title('Frame Individuality Distribution by Condition');
+    set(gca, 'TickDir', 'out');
     
     % Add sample sizes
     for cond_idx = 1:length(conditions_with_data)
