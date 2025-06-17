@@ -605,7 +605,7 @@ logger(sprintf('Frame-level individuality: %d/%d frames (%.1f%%) are in individu
 
 %% Create individuality visualization functions
 
-function plot_individuality_tsne_map_condition(analysisstruct, individuality_data, condition_idx, visualize, condition_name)
+function plot_individuality_tsne_map_condition(analysisstruct, individuality_data, condition_idx, visualize, condition_name, export_folder, do_export)
     % Create figure showing individual clusters on t-SNE map using GLOBAL individuality analysis
     fig = figure('Name', 'Individuality Analysis: t-SNE Maps', 'Visible', visualize);
     set(fig, 'Position', [300, 100, 1400, 800]);
@@ -684,9 +684,16 @@ function plot_individuality_tsne_map_condition(analysisstruct, individuality_dat
     sgtitle(sprintf('Pose Individuality Analysis - %s (Global Analysis: %d animals, %d clusters)', ...
         condition_name, length(individuality_data.global_unique_animals), length(individuality_data.cluster_ids)), ...
         'FontSize', 16, 'FontWeight', 'bold');
+    
+    % Export if requested
+    if do_export
+        tsne_maps_filename = fullfile(export_folder, sprintf('%s_individuality_tsne_maps.png', lower(condition_name)));
+        saveas(fig, tsne_maps_filename);
+        logger(sprintf('Saved %s individuality t-SNE maps: %s', condition_name, tsne_maps_filename), 'INFO');
+    end
 end
 
-function plot_individuality_per_animal_condition(analysisstruct, individuality_data, condition_idx, ~, visualize, condition_name, selected_condition)
+function plot_individuality_per_animal_condition(analysisstruct, individuality_data, condition_idx, ~, visualize, condition_name, selected_condition, export_folder, do_export)
     % Create figure showing individual clusters for each animal using GLOBAL t-SNE coordinates
     unique_animals = individuality_data.unique_animals;
     n_animals = length(unique_animals);
@@ -752,6 +759,13 @@ function plot_individuality_per_animal_condition(analysisstruct, individuality_d
     end
     
     sgtitle(sprintf('Individual Clusters per Animal - %s (Global Individuality Analysis)', condition_name), 'FontSize', 16, 'FontWeight', 'bold');
+    
+    % Export if requested
+    if do_export
+        per_animal_filename = fullfile(export_folder, sprintf('%s_individuality_per_animal.png', lower(condition_name)));
+        saveas(fig, per_animal_filename);
+        logger(sprintf('Saved %s individuality per animal: %s', condition_name, per_animal_filename), 'INFO');
+    end
 end
 
 function plot_individuality_statistics_condition(individuality_data, visualize, export_folder, do_export, condition_name, selected_condition, global_unique_animal_condition_ids)
@@ -1024,10 +1038,10 @@ end
 logger(sprintf('Creating individuality visualizations for %s data', selected_condition_name), 'INFO');
 
 % Create t-SNE individuality maps
-plot_individuality_tsne_map_condition(analysisstruct, individuality_analysis, idx_condition, visualize, selected_condition_name);
+plot_individuality_tsne_map_condition(analysisstruct, individuality_analysis, idx_condition, visualize, selected_condition_name, export_folder, do_export);
 
 % Create per-animal individuality maps
-plot_individuality_per_animal_condition(analysisstruct, individuality_analysis, idx_condition, condition_animal_names, visualize, selected_condition_name, selected_condition);
+plot_individuality_per_animal_condition(analysisstruct, individuality_analysis, idx_condition, condition_animal_names, visualize, selected_condition_name, selected_condition, export_folder, do_export);
 
 % Create statistical analysis plots (cluster-level)
 plot_individuality_statistics_condition(individuality_analysis, visualize, export_folder, do_export, selected_condition_name, selected_condition, global_unique_animal_condition_ids);
