@@ -27,9 +27,10 @@ function GC = general_configs()
         temp_root = fullfile('~/Documents/Temp_analysis/CAPTURE');
         drive_V = '/Volumes/V/';
     elseif isunix
-        project_path = '/home/mario/Documents/Spontaneous_pain_kinematics';
-        temp_root = '/home/mario/Documents/Temp_analysis/CAPTURE';
-        drive_V = 'mnt/V/';
+        project_path = '/home/mario/Documents/Projects/CAPTURE/';
+        temp_root = '/home/mario/Documents/Projects/CAPTURE/';
+        drive_V = '/mnt/groupnevian4';
+
     end
     if ~exist(temp_root, 'dir')
         mkdir(temp_root)
