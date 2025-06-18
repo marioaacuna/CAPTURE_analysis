@@ -661,7 +661,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
             'FontSize', 10, 'FontWeight', 'bold');
     elseif ~perform_statistical_tests
         text(0.5, max(means_cluster + sems_cluster) * 1.1, 'Statistical tests disabled (Debug Mode)', ...
-            'FontSize', 8, 'FontStyle', 'italic', 'Color', [0.5 0.5 0.5]);
+            'FontSize', 8, 'Color', [0.5 0.5 0.5]);
     end
     
     % Subplot 2: Frame Individuality Comparison
@@ -682,7 +682,7 @@ function create_condition_comparison_plots(condition_data, available_conditions,
             'FontSize', 10, 'FontWeight', 'bold');
     elseif ~perform_statistical_tests
         text(0.5, max(means_frame + sems_frame) * 1.1, 'Statistical tests disabled (Debug Mode)', ...
-            'FontSize', 8, 'FontStyle', 'italic', 'Color', [0.5 0.5 0.5]);
+            'FontSize', 8,  'Color', [0.5 0.5 0.5]);
     end
     
     % Subplot 3: Correlation between cluster and frame individuality
