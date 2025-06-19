@@ -98,9 +98,9 @@ end
 
 %% 
 % Call the function to analyze and plot the calcium metrics comparison
-A = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'max_amplitude', 'S_v_F');
-P = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'peaks', 'S_v_F');
-F = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'freqs', 'S_v_F');
+[A,Aor] = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'max_amplitude', 'S_v_F');
+[P, Por] = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'peaks', 'S_v_F');
+[F,Ford] = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'freqs', 'S_v_F');
 
 
 %% Plot poses that are gained and lost in activity
@@ -114,8 +114,8 @@ load(GC.filename_analysis, 'analysisstruct');
 
 
 
-% cls = P.increased;
-cls = [5,6,2];
+cls = F.increased;
+% cls = [5,6,2];
 plot_poses = 1;
 if plot_poses
     % h= figure(370);
@@ -136,7 +136,7 @@ if plot_poses
 end
 
 
-cls = P.decreased;
+cls = F.decreased;
 plot_poses = 1;
 if plot_poses
     % h= figure(370);

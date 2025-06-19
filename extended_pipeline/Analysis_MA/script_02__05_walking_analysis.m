@@ -73,7 +73,7 @@ frames_to_plot = [bout_starts(1):bout_ends(1),bout_starts(3): bout_ends(3)];
 
 % Create GIF
 logger('Creating GIF', 'INFO');
-gif_filename = 'walking_analysis.gif';
+gif_filename = fullfile(GC.temp_root, 'walking_analysis.gif');
 h = figure;
 for frame = 1:length(frames_to_plot)
     % Plot 

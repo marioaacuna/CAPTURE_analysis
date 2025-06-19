@@ -91,10 +91,71 @@ end
 
 
 % Call the function to analyze and plot the calcium metrics comparison
-analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'max_amplitude', 'H_v_N');
-analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'peaks', 'H_v_N');
-analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'freqs', 'H_v_N');
+[A, Aor]= analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'max_amplitude', 'H_v_N');
+[P, Por]=analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'peaks', 'H_v_N');
+[F, For]=analyze_calcium_metrics_comparison(data_H, data_N, animals_of_interest, 'freqs', 'H_v_N');
+
+%%
+%% Plot poses that are gained and lost in activity
+% for now let's take only one. Peak amplitude (P)
+% load analysis struct
+logger('Loading analysisstrcut', 'INFO');
+% Load analysis structure
+load(GC.filename_analysis, 'analysisstruct');
+%%
+
+
+
+
+cls = F.increased;
+% cls = [5,6,2];
+plot_poses = 1;
+if plot_poses
+    % h= figure(370);
+    % clf;
+
+    fig_i = figure('pos', [10,300,1500,1900]);
+    nclus = numel(cls);
+    n_rows = ceil(sqrt(nclus));
+    n_cols = ceil(sqrt(nclus));
+    for ic = 1:numel(cls)
+        subplot(n_rows, n_cols, ic)
+        this_cls = cls(ic);
+        fprintf('ic = %i - \n', this_cls)
+        plot_mean_cluster_aligned(analysisstruct.highdensity_analysisstruct.mocapstruct_reduced_agg{1},...
+            find(analysisstruct.highdensity_analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+        title(this_cls)
+    end
+end
+
+
+cls = F.decreased;
+plot_poses = 1;
+if plot_poses
+    % h= figure(370);
+    % clf;
+
+    fig_d = figure('pos', [10,300,1500,1900]);
+    nclus = numel(cls);
+    n_rows = ceil(sqrt(nclus));
+    n_cols = ceil(sqrt(nclus));
+    for ic = 1:numel(cls)
+        subplot(n_rows, n_cols, ic)
+        this_cls = cls(ic);
+        fprintf('ic = %i - \n', this_cls)
+        plot_mean_cluster_aligned(analysisstruct.highdensity_analysisstruct.mocapstruct_reduced_agg{1},...
+            find(analysisstruct.highdensity_analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+        title(this_cls)
+    end
+end
+
+
+
+
+
 %% Not necessary
+
+
 
 %% ----------
 global_clusters = [];
