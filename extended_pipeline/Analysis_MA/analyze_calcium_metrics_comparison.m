@@ -1,4 +1,4 @@
-function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, metric_to_take, comparison)
+function cluster_changes = analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, metric_to_take, comparison)
     % analyze_calcium_metrics_comparison - Analyzes and visualizes calcium imaging metrics
     % 
     % This function performs comprehensive analysis and visualization of calcium imaging 
@@ -12,11 +12,19 @@ function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, m
     %   metric_to_take - String specifying metric ('max_amplitude', 'peaks', 'freqs')
     %   comparison - String specifying comparison type ('S_v_F' or 'H_v_N')
     %
+    % Outputs:
+    %   cluster_changes - Structure containing cluster classifications:
+    %                    .increased - cluster IDs with significant increase
+    %                    .decreased - cluster IDs with significant decrease  
+    %                    .no_change - cluster IDs with no significant change
+    %                    .statistics - detailed statistics for each cluster
+    %
     % The function:
     %   1. Concatenates data across animals for each cluster
-    %   2. Filters out clusters with insufficient data
-    %   3. Generates four visualization types with appropriate sorting
-    %   4. Exports figures to the configured temporary directory
+    %   2. Handles clusters present in only one condition (assigns zeros)
+    %   3. Classifies clusters based on statistical significance and direction
+    %   4. Generates four visualization types with appropriate sorting
+    %   5. Exports figures to the configured temporary directory
     
     global GC;
     
@@ -88,9 +96,7 @@ function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, m
                 end
             end
         end
-    end
-
-    % Initialize structures for all ROIs per cluster
+    end    % Initialize structures for all ROIs per cluster
     all_ROIs_per_cluster_1 = struct();
     all_ROIs_per_cluster_2 = struct();
 
@@ -111,8 +117,60 @@ function analyze_calcium_metrics_comparison(data1, data2, animals_of_interest, m
         end
         
         cluster_str = ['cluster_' num2str(global_clusters(cluster_idx))];
+        
+        % Handle empty clusters by assigning zeros
+        if isempty(all_ROIs_1)
+            all_ROIs_1 = 0;
+        end
+        if isempty(all_ROIs_2)
+            all_ROIs_2 = 0;
+        end
+        
         all_ROIs_per_cluster_1.(cluster_str) = all_ROIs_1;
         all_ROIs_per_cluster_2.(cluster_str) = all_ROIs_2;
+    end
+
+    % Classify clusters based on statistical significance and direction of change
+    cluster_changes = classify_cluster_changes(all_ROIs_per_cluster_1, all_ROIs_per_cluster_2, global_clusters);
+    
+    % Display cluster classification results
+    fprintf('\n=== Cluster Classification Results for %s vs %s ===\n', group1_label, group2_label);
+    fprintf('Metric: %s\n\n', metric_to_take);
+    
+    if ~isempty(cluster_changes.increased)
+        fprintf('Clusters with SIGNIFICANT INCREASE:\n');
+        for i = 1:length(cluster_changes.increased)
+            cluster_id = cluster_changes.increased(i);
+            stats = cluster_changes.statistics.(['cluster_' num2str(cluster_id)]);
+            fprintf('  Cluster %d: p=%.4f, difference=%.4f\n', cluster_id, stats.p_value, stats.difference);
+        end
+        fprintf('\n');
+    else
+        fprintf('No clusters with significant increase.\n\n');
+    end
+    
+    if ~isempty(cluster_changes.decreased)
+        fprintf('Clusters with SIGNIFICANT DECREASE:\n');
+        for i = 1:length(cluster_changes.decreased)
+            cluster_id = cluster_changes.decreased(i);
+            stats = cluster_changes.statistics.(['cluster_' num2str(cluster_id)]);
+            fprintf('  Cluster %d: p=%.4f, difference=%.4f\n', cluster_id, stats.p_value, stats.difference);
+        end
+        fprintf('\n');
+    else
+        fprintf('No clusters with significant decrease.\n\n');
+    end
+    
+    if ~isempty(cluster_changes.no_change)
+        fprintf('Clusters with NO SIGNIFICANT CHANGE:\n');
+        for i = 1:length(cluster_changes.no_change)
+            cluster_id = cluster_changes.no_change(i);
+            stats = cluster_changes.statistics.(['cluster_' num2str(cluster_id)]);
+            fprintf('  Cluster %d: p=%.4f, difference=%.4f\n', cluster_id, stats.p_value, stats.difference);
+        end
+        fprintf('\n');
+    else
+        fprintf('All clusters show significant changes.\n\n');
     end
 
     % Generate plots
@@ -256,36 +314,51 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
     errors = zeros(1, length(clusters));
     p_values_array = zeros(1, length(clusters));
     valid_indices = false(1, length(clusters));
-    
-    % Calculate differences and statistics
+      % Calculate differences and statistics
     for i = 1:length(clusters)
         cluster_name = clusters{i};
         
         data_group1 = data1.(cluster_name);
         data_group2 = data2.(cluster_name);
         
-        % Check if data is available for calculation
-        if (isempty(data_group1) && isempty(data_group2))
-            % Both groups empty, skip this cluster
-            continue;
-        end
-        
-        % Handle empty groups by treating them as zeros for difference calculation
-        mean_group1 = 0;
-        mean_group2 = 0;
-        
-        if ~isempty(data_group1)
+        % Handle cases where data might be scalar zero (empty cluster)
+        if isscalar(data_group1) && data_group1 == 0
+            mean_group1 = 0;
+        elseif isempty(data_group1)
+            mean_group1 = 0;
+        else
             mean_group1 = nanmean(data_group1);
         end
         
-        if ~isempty(data_group2)
+        if isscalar(data_group2) && data_group2 == 0
+            mean_group2 = 0;
+        elseif isempty(data_group2)
+            mean_group2 = 0;
+        else
             mean_group2 = nanmean(data_group2);
         end
+          differences(i) = mean_group2 - mean_group1;
         
-        differences(i) = mean_group2 - mean_group1;
-        
-        % Calculate error only if both groups have data
-        if ~isempty(data_group1) && ~isempty(data_group2)
+        % Calculate error - handle scalar zeros (empty clusters)
+        if (isscalar(data_group1) && data_group1 == 0) && (isscalar(data_group2) && data_group2 == 0)
+            % Both groups are empty clusters (scalar zeros)
+            errors(i) = 0;
+        elseif (isscalar(data_group1) && data_group1 == 0) && ~(isscalar(data_group2) && data_group2 == 0)
+            % Group 1 is empty cluster, group 2 has data
+            if ~isempty(data_group2)
+                errors(i) = nanstd(data_group2)/sqrt(length(data_group2));
+            else
+                errors(i) = 0;
+            end
+        elseif ~(isscalar(data_group1) && data_group1 == 0) && (isscalar(data_group2) && data_group2 == 0)
+            % Group 1 has data, group 2 is empty cluster
+            if ~isempty(data_group1)
+                errors(i) = nanstd(data_group1)/sqrt(length(data_group1));
+            else
+                errors(i) = 0;
+            end
+        elseif ~isempty(data_group1) && ~isempty(data_group2)
+            % Both groups have actual data
             errors(i) = sqrt((nanstd(data_group2)^2/length(data_group2)) + (nanstd(data_group1)^2/length(data_group1)));
         elseif ~isempty(data_group1)
             errors(i) = nanstd(data_group1)/sqrt(length(data_group1));
@@ -295,8 +368,12 @@ function plot_difference_chart(data1, data2, group1_label, group2_label, metric_
             errors(i) = 0;
         end
         
+        % Statistical test - handle scalar zeros
         try
-            if ~isempty(data_group1) && ~isempty(data_group2)
+            if (isscalar(data_group1) && data_group1 == 0) || (isscalar(data_group2) && data_group2 == 0)
+                % If either group is empty cluster, use different significance level
+                p_values_array(i) = 0.001; % Show as significant for visualization
+            elseif ~isempty(data_group1) && ~isempty(data_group2)
                 [~, p] = ttest2(data_group1, data_group2);
                 p_values_array(i) = p;
             else
@@ -585,4 +662,143 @@ function plot_scatter_comparison(data1, data2, group1_label, group2_label, metri
         fig_name = ['ScatterComparison_' metric_to_take '_' group1_label '_vs_' group2_label];
         exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
     end
+end
+
+function cluster_changes = classify_cluster_changes(data1, data2, global_clusters)
+    % classify_cluster_changes - Classifies clusters based on statistical significance and direction
+    %
+    % This function analyzes each cluster to determine if there is a significant
+    % increase, decrease, or no change between the two conditions. It handles
+    % clusters that may be present in only one condition by treating missing
+    % data as zeros.
+    %
+    % Inputs:
+    %   data1 - Structure containing group 1 data for each cluster
+    %   data2 - Structure containing group 2 data for each cluster
+    %   global_clusters - Array of all cluster IDs to analyze
+    %
+    % Outputs:
+    %   cluster_changes - Structure containing:
+    %                    .increased - cluster IDs with significant increase (p<0.05, group2>group1)
+    %                    .decreased - cluster IDs with significant decrease (p<0.05, group2<group1)
+    %                    .no_change - cluster IDs with no significant change (p>=0.05)
+    %                    .statistics - detailed statistics for each cluster
+    
+    % Initialize output structure
+    cluster_changes = struct();
+    cluster_changes.increased = [];
+    cluster_changes.decreased = [];
+    cluster_changes.no_change = [];
+    cluster_changes.statistics = struct();
+    
+    % Significance threshold
+    alpha = 0.05;
+    
+    % Analyze each cluster
+    for i = 1:length(global_clusters)
+        cluster_id = global_clusters(i);
+        cluster_str = ['cluster_' num2str(cluster_id)];
+        
+        % Get data for this cluster
+        data_group1 = data1.(cluster_str);
+        data_group2 = data2.(cluster_str);
+        
+        % Handle cases where data might be scalar zero (empty cluster)
+        if isscalar(data_group1) && data_group1 == 0
+            data_group1 = [];
+        end
+        if isscalar(data_group2) && data_group2 == 0
+            data_group2 = [];
+        end
+        
+        % Calculate means (treat empty as 0)
+        if isempty(data_group1)
+            mean_group1 = 0;
+            std_group1 = 0;
+            n_group1 = 1; % Treat as single observation of 0
+        else
+            mean_group1 = nanmean(data_group1);
+            std_group1 = nanstd(data_group1);
+            n_group1 = length(data_group1);
+        end
+        
+        if isempty(data_group2)
+            mean_group2 = 0;
+            std_group2 = 0;
+            n_group2 = 1; % Treat as single observation of 0
+        else
+            mean_group2 = nanmean(data_group2);
+            std_group2 = nanstd(data_group2);
+            n_group2 = length(data_group2);
+        end
+        
+        % Calculate difference (group2 - group1)
+        difference = mean_group2 - mean_group1;
+        
+        % Perform statistical test
+        p_value = 1; % Default to non-significant
+        tstat = 0;
+        
+        if ~isempty(data_group1) && ~isempty(data_group2)
+            % Both groups have data - use t-test
+            try
+                [~, p_value, ~, stats] = ttest2(data_group1, data_group2);
+                tstat = stats.tstat;
+            catch
+                p_value = 1;
+                tstat = 0;
+            end
+        elseif isempty(data_group1) && ~isempty(data_group2)
+            % Only group 2 has data - test against zero
+            try
+                [~, p_value, ~, stats] = ttest(data_group2, 0);
+                tstat = stats.tstat;
+            catch
+                p_value = 1;
+                tstat = 0;
+            end
+        elseif ~isempty(data_group1) && isempty(data_group2)
+            % Only group 1 has data - test against zero (negative direction)
+            try
+                [~, p_value, ~, stats] = ttest(data_group1, 0);
+                tstat = -stats.tstat; % Negative because we're testing group2-group1
+            catch
+                p_value = 1;
+                tstat = 0;
+            end
+        else
+            % Both groups empty - no change
+            p_value = 1;
+            tstat = 0;
+        end
+        
+        % Store detailed statistics
+        cluster_changes.statistics.(cluster_str) = struct();
+        cluster_changes.statistics.(cluster_str).cluster_id = cluster_id;
+        cluster_changes.statistics.(cluster_str).mean_group1 = mean_group1;
+        cluster_changes.statistics.(cluster_str).mean_group2 = mean_group2;
+        cluster_changes.statistics.(cluster_str).difference = difference;
+        cluster_changes.statistics.(cluster_str).p_value = p_value;
+        cluster_changes.statistics.(cluster_str).t_statistic = tstat;
+        cluster_changes.statistics.(cluster_str).n_group1 = n_group1;
+        cluster_changes.statistics.(cluster_str).n_group2 = n_group2;
+        cluster_changes.statistics.(cluster_str).std_group1 = std_group1;
+        cluster_changes.statistics.(cluster_str).std_group2 = std_group2;
+        
+        % Classify based on significance and direction
+        if p_value < alpha
+            if difference > 0
+                cluster_changes.increased(end+1) = cluster_id;
+            else
+                cluster_changes.decreased(end+1) = cluster_id;
+            end
+        else
+            cluster_changes.no_change(end+1) = cluster_id;
+        end
+    end
+    
+    % Sort the arrays for consistent output
+    cluster_changes.increased = sort(cluster_changes.increased);
+    cluster_changes.decreased = sort(cluster_changes.decreased);
+    cluster_changes.no_change = sort(cluster_changes.no_change);
 end

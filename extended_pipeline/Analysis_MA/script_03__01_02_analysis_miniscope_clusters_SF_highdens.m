@@ -98,10 +98,64 @@ end
 
 %% 
 % Call the function to analyze and plot the calcium metrics comparison
-analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'max_amplitude', 'S_v_F');
-analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'peaks', 'S_v_F');
-analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'freqs', 'S_v_F');
+A = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'max_amplitude', 'S_v_F');
+P = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'peaks', 'S_v_F');
+F = analyze_calcium_metrics_comparison(data_S, data_F, animals_of_interest, 'freqs', 'S_v_F');
+
+
+%% Plot poses that are gained and lost in activity
+% for now let's take only one. Peak amplitude (P)
+% load analysis struct
+logger('Loading analysisstrcut', 'INFO');
+% Load analysis structure
+load(GC.filename_analysis, 'analysisstruct');
+%%
+
+
+
+
+% cls = P.increased;
+cls = [5,6,2];
+plot_poses = 1;
+if plot_poses
+    % h= figure(370);
+    % clf;
+
+    fig_i = figure('pos', [10,300,1500,1900]);
+    nclus = numel(cls);
+    n_rows = ceil(sqrt(nclus));
+    n_cols = ceil(sqrt(nclus));
+    for ic = 1:numel(cls)
+        subplot(n_rows, n_cols, ic)
+        this_cls = cls(ic);
+        fprintf('ic = %i - \n', this_cls)
+        plot_mean_cluster_aligned(analysisstruct.highdensity_analysisstruct.mocapstruct_reduced_agg{1},...
+            find(analysisstruct.highdensity_analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+        title(this_cls)
+    end
+end
+
+
+cls = P.decreased;
+plot_poses = 1;
+if plot_poses
+    % h= figure(370);
+    % clf;
+
+    fig_d = figure('pos', [10,300,1500,1900]);
+    nclus = numel(cls);
+    n_rows = ceil(sqrt(nclus));
+    n_cols = ceil(sqrt(nclus));
+    for ic = 1:numel(cls)
+        subplot(n_rows, n_cols, ic)
+        this_cls = cls(ic);
+        fprintf('ic = %i - \n', this_cls)
+        plot_mean_cluster_aligned(analysisstruct.highdensity_analysisstruct.mocapstruct_reduced_agg{1},...
+            find(analysisstruct.highdensity_analysisstruct.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+        title(this_cls)
+    end
+end
 
 %% analysis neuronal ensembles pca
-names = {'Saline', 'Formalin'};
-script_03__01_01_test_analysis_neuronalensembles(data_S, data_F, names)
+% names = {'Saline', 'Formalin'};
+% script_03__01_01_test_analysis_neuronalensembles(data_S, data_F, names)
