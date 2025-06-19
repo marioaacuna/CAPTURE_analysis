@@ -45,7 +45,7 @@ if ~exist(save_folder, 'dir')
 end
 
 % check if file exists and if you want to run it again
-clusters_struct_file = fullfile(save_folder, 'clusters_struct.mat');
+clusters_struct_file = fullfile(save_folder, 'clusters_struct_high_density.mat');
 
 %{
  if exist(clusters_struct_file, 'file')
@@ -90,7 +90,7 @@ logger('Looping through animals to extract clusters', 'INFO');
 clusters_struct = struct();
 for animal_idx = 1:length(animal_list)
     animal_ID = animal_list{animal_idx};
-    clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstruct, upsamplig_factor, conditions);
+    clusters = get_clusters(animal_list, animal_ID, cond_inds, analysisstruct.highdensity_analysisstruct, upsamplig_factor, conditions);
     % store the clusters in a sturcture
     animal_ID_in_struct = ['ID_',animal_ID];
     clusters_struct.(animal_ID_in_struct) = clusters;

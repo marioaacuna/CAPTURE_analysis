@@ -57,7 +57,7 @@ set(h1,'Position',([100 100 1100 1100]))
 export_folder = fullfile(GC.temp_root);
 
 fig_name = ['High-dens_clustering'];
-exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
+% exportgraphics(gcf, fullfile(export_folder, [fig_name,'.pdf']), 'ContentType', 'vector', 'BackgroundColor', 'none');
 
 % bird specific axes
 axisparams.zlim = ([200 300]);
@@ -65,30 +65,61 @@ axisparams.xlim = ([-400 400]);
 axisparams.ylim = ([-400 400]);
 
 %% make video to see each cluster
+% 
+% h=figure(370);
+% CL = cell(length(seq_c_idx),1);
+% for seq_ic = 1:numel(seq_cls)
+%     this_cls = seq_cls(seq_ic);    fprintf('ic = %i - ', this_cls)
+%      CL(seq_ic) =  {find(hierarchystruct.clustered_behavior{1}==this_cls)};
+%     if this_cls==0,  fprintf('\n'),continue, end
+%     animate_markers_nonaligned_fullmovie_demo(analysisstruct_to_use.mocapstruct_reduced_agg{1},...
+%         find(hierarchystruct.clustered_behavior{1}==this_cls), h, [], ['ic =  ',num2str(this_cls)]);
+% 
+% end
+% 
+% [cls, c_idx, r] = unique(analysisstruct_to_use.annot_reordered{end}, 'stable');
+% 
+% fig_poses = figure('pos', [10,300,1500,1900]);
+% nclus = numel(cls);
+% 
+% for ic = 1:numel(cls)
+%     % subplot(n_rows, n_cols, ic)
+%     this_cls = cls(ic);
+%     frames_to_plot = find(analysisstruct_to_use.annot_reordered{end}==this_cls);
+%     frames_to_plot = frames_to_plot(1:min(frames_to_plot(end), 1000)); % limit to 1000 frames
+%     fprintf('ic = %i - \n', this_cls)
+%     animate_markers_nonaligned_fullmovie_demo(analysisstruct_to_use.mocapstruct_reduced_agg{1},...
+%         frames_to_plot,fig_poses, [],['cl nr :  ', num2str(this_cls)]);
+%     title(this_cls)
+% end
 
-h=figure(370);
-CL = cell(length(seq_c_idx),1);
-for seq_ic = 1:numel(seq_cls)
-    this_cls = seq_cls(seq_ic);    fprintf('ic = %i - ', this_cls)
-     CL(seq_ic) =  {find(hierarchystruct.clustered_behavior{1}==this_cls)};
-    if this_cls==0,  fprintf('\n'),continue, end
-    animate_markers_nonaligned_fullmovie_demo(analysisstruct_to_use.mocapstruct_reduced_agg{1},...
-        find(hierarchystruct.clustered_behavior{1}==this_cls), h, [], ['ic =  ',num2str(this_cls)]);
 
+%% Plot cluster poses
+[cls, c_idx, r] = unique(analysisstruct_to_use.annot_reordered{end});
+%%
+cls =[12,22,32,13,21, 9, 27]
+plot_poses = 1;
+if plot_poses
+    % h= figure(370);
+    % clf;
+
+    fig_poses = figure('pos', [10,300,1500,1900]);
+    nclus = numel(cls);
+    n_rows = ceil(sqrt(nclus));
+    n_cols = ceil(sqrt(nclus));
+    for ic = 1:numel(cls)
+        subplot(n_rows, n_cols, ic)
+        this_cls = cls(ic);
+        fprintf('ic = %i - \n', this_cls)
+        plot_mean_cluster_aligned(analysisstruct_to_use.mocapstruct_reduced_agg{1},...
+            find(analysisstruct_to_use.annot_reordered{end}==this_cls),['cl nr :  ', num2str(this_cls)]);
+        title(this_cls)
+    end
 end
+% save cluster plot
+cluster_poses_figure_filename = fullfile(GC.figure_folder, 'Poses_clusters.pdf');
 
-[cls, c_idx, r] = unique(analysisstruct_to_use.annot_reordered{end}, 'stable');
-
-fig_poses = figure('pos', [10,300,1500,1900]);
-nclus = numel(cls);
-
-for ic = 1:numel(cls)
-    % subplot(n_rows, n_cols, ic)
-    this_cls = cls(ic);
-    frames_to_plot = find(analysisstruct_to_use.annot_reordered{end}==this_cls);
-    frames_to_plot = frames_to_plot(1:min(frames_to_plot(end), 1000)); % limit to 1000 frames
-    fprintf('ic = %i - \n', this_cls)
-    animate_markers_nonaligned_fullmovie_demo(analysisstruct_to_use.mocapstruct_reduced_agg{1},...
-        frames_to_plot,fig_poses, [],['cl nr :  ', num2str(this_cls)]);
-    title(this_cls)
-end
+% %% Save analysis struct back with the high density data
+% highdensity_analysisstruct = analysisstruct_to_use;
+% analysisstruct.highdensity_analysisstruct = highdensity_analysisstruct;
+% save(GC.filename_analysis, 'analysisstruct', '-v7.3')

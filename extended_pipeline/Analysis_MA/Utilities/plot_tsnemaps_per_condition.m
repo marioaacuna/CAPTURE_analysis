@@ -7,7 +7,7 @@ GC = general_configs;
 rootpath = GC.preprocessing_rootpath;
 
 % Configuration for visualization and export
-debugging = false;  % Set to true for debugging mode
+debugging = true;  % Set to true for debugging mode
 if debugging
     visualize = 'on';  % Show figures during debugging
     do_export = false;  % Don't export during debugging
