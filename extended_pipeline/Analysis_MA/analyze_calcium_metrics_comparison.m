@@ -377,12 +377,22 @@ function plot_order = plot_difference_chart(data1, data2, group1_label, group2_l
     sorted_clusters = clusters(sorted_indices);
     sorted_errors = errors(sorted_indices);
     sorted_p_values = p_values_array(sorted_indices);
-    
-    % Create color coding based on p-values
+      % Create color coding based on p-values and direction of change
     colors = zeros(length(sorted_clusters), 3);
-    colors(sorted_p_values < 0.05 & sorted_p_values >= 0.01, :) = repmat([0.8 0.4 0], sum(sorted_p_values < 0.05 & sorted_p_values >= 0.01), 1);
-    colors(sorted_p_values < 0.01 & sorted_p_values >= 0.001, :) = repmat([0.9 0.2 0], sum(sorted_p_values < 0.01 & sorted_p_values >= 0.001), 1);
-    colors(sorted_p_values < 0.001, :) = repmat([1 0 0], sum(sorted_p_values < 0.001), 1);
+    
+    % For significant positive values (red shades)
+    positive_sig = sorted_differences > 0 & sorted_p_values < 0.05;
+    colors(positive_sig & sorted_p_values >= 0.01, :) = repmat([1.0 0.6 0.6], sum(positive_sig & sorted_p_values >= 0.01), 1); % Light red for p<0.05
+    colors(positive_sig & sorted_p_values < 0.01 & sorted_p_values >= 0.001, :) = repmat([0.8 0.2 0.2], sum(positive_sig & sorted_p_values < 0.01 & sorted_p_values >= 0.001), 1); % Medium red for p<0.01
+    colors(positive_sig & sorted_p_values < 0.001, :) = repmat([0.6 0.0 0.0], sum(positive_sig & sorted_p_values < 0.001), 1); % Dark red for p<0.001
+    
+    % For significant negative values (blue shades)
+    negative_sig = sorted_differences < 0 & sorted_p_values < 0.05;
+    colors(negative_sig & sorted_p_values >= 0.01, :) = repmat([0.6 0.6 1.0], sum(negative_sig & sorted_p_values >= 0.01), 1); % Light blue for p<0.05
+    colors(negative_sig & sorted_p_values < 0.01 & sorted_p_values >= 0.001, :) = repmat([0.2 0.2 0.8], sum(negative_sig & sorted_p_values < 0.01 & sorted_p_values >= 0.001), 1); % Medium blue for p<0.01
+    colors(negative_sig & sorted_p_values < 0.001, :) = repmat([0.0 0.0 0.6], sum(negative_sig & sorted_p_values < 0.001), 1); % Dark blue for p<0.001
+    
+    % For non-significant values (gray)
     colors(sorted_p_values >= 0.05, :) = repmat([0.7 0.7 0.7], sum(sorted_p_values >= 0.05), 1);
     
     % Plot
@@ -419,15 +429,17 @@ function plot_order = plot_difference_chart(data1, data2, group1_label, group2_l
     set(gca, 'XTick', {});
     box off;
     set(gca, 'TickDir', 'out');
-    
-    % Add legend
+      % Add legend
     legend_elements = [
         patch([0 0], [0 0], [0.7 0.7 0.7], 'DisplayName', 'n.s.');
-        patch([0 0], [0 0], [0.8 0.4 0], 'DisplayName', 'p < 0.05');
-        patch([0 0], [0 0], [0.9 0.2 0], 'DisplayName', 'p < 0.01');
-        patch([0 0], [0 0], [1 0 0], 'DisplayName', 'p < 0.001')
+        patch([0 0], [0 0], [1.0 0.6 0.6], 'DisplayName', 'p < 0.05 (increase)');
+        patch([0 0], [0 0], [0.8 0.2 0.2], 'DisplayName', 'p < 0.01 (increase)');
+        patch([0 0], [0 0], [0.6 0.0 0.0], 'DisplayName', 'p < 0.001 (increase)');
+        patch([0 0], [0 0], [0.6 0.6 1.0], 'DisplayName', 'p < 0.05 (decrease)');
+        patch([0 0], [0 0], [0.2 0.2 0.8], 'DisplayName', 'p < 0.01 (decrease)');
+        patch([0 0], [0 0], [0.0 0.0 0.6], 'DisplayName', 'p < 0.001 (decrease)')
     ];
-    legend(legend_elements, 'Location', 'northeast');    % Export figure
+    legend(legend_elements, 'Location', 'northeast');% Export figure
     if ~isempty(GC) && isfield(GC, 'temp_root')
         export_folder = GC.temp_root;
         fig_name = ['DifferenceChart_' metric_to_take '_' group1_label '_vs_' group2_label];
@@ -602,12 +614,25 @@ function plot_scatter_comparison(data1, data2, group1_label, group2_label, metri
             p_values_array(i) = 1;
         end
     end
-    
-    % Create color coding
+      % Create color coding based on p-values and direction of change
     colors = zeros(num_clusters, 3);
-    colors(p_values_array < 0.05 & p_values_array >= 0.01, :) = repmat([0.8 0.4 0], sum(p_values_array < 0.05 & p_values_array >= 0.01), 1);
-    colors(p_values_array < 0.01 & p_values_array >= 0.001, :) = repmat([0.9 0.2 0], sum(p_values_array < 0.01 & p_values_array >= 0.001), 1);
-    colors(p_values_array < 0.001, :) = repmat([1 0 0], sum(p_values_array < 0.001), 1);
+    
+    % Calculate differences for direction determination
+    differences = means_2 - means_1;
+    
+    % For significant positive values (red shades)
+    positive_sig = differences > 0 & p_values_array < 0.05;
+    colors(positive_sig & p_values_array >= 0.01, :) = repmat([1.0 0.6 0.6], sum(positive_sig & p_values_array >= 0.01), 1); % Light red for p<0.05
+    colors(positive_sig & p_values_array < 0.01 & p_values_array >= 0.001, :) = repmat([0.8 0.2 0.2], sum(positive_sig & p_values_array < 0.01 & p_values_array >= 0.001), 1); % Medium red for p<0.01
+    colors(positive_sig & p_values_array < 0.001, :) = repmat([0.6 0.0 0.0], sum(positive_sig & p_values_array < 0.001), 1); % Dark red for p<0.001
+    
+    % For significant negative values (blue shades)
+    negative_sig = differences < 0 & p_values_array < 0.05;
+    colors(negative_sig & p_values_array >= 0.01, :) = repmat([0.6 0.6 1.0], sum(negative_sig & p_values_array >= 0.01), 1); % Light blue for p<0.05
+    colors(negative_sig & p_values_array < 0.01 & p_values_array >= 0.001, :) = repmat([0.2 0.2 0.8], sum(negative_sig & p_values_array < 0.01 & p_values_array >= 0.001), 1); % Medium blue for p<0.01
+    colors(negative_sig & p_values_array < 0.001, :) = repmat([0.0 0.0 0.6], sum(negative_sig & p_values_array < 0.001), 1); % Dark blue for p<0.001
+    
+    % For non-significant values (gray)
     colors(p_values_array >= 0.05, :) = repmat([0.7 0.7 0.7], sum(p_values_array >= 0.05), 1);
     
     % Plot connecting lines and points
@@ -626,15 +651,17 @@ function plot_scatter_comparison(data1, data2, group1_label, group2_label, metri
     set(gca, 'YTick', 1:num_clusters);
     set(gca, 'YTickLabel', 1:num_clusters); % Use numbers instead of cluster names
     box off;
-    set(gca, 'TickDir', 'out');
-      % Add legend
+    set(gca, 'TickDir', 'out');      % Add legend
     legend_elements = [
         scatter(NaN, NaN, 50, 'b', 'filled', 'DisplayName', group1_label);
         scatter(NaN, NaN, 50, 'r', 'filled', 'DisplayName', group2_label);
         line([NaN NaN], [NaN NaN], 'Color', [0.7 0.7 0.7], 'DisplayName', 'n.s.');
-        line([NaN NaN], [NaN NaN], 'Color', [0.8 0.4 0], 'DisplayName', 'p < 0.05');
-        line([NaN NaN], [NaN NaN], 'Color', [0.9 0.2 0], 'DisplayName', 'p < 0.01');
-        line([NaN NaN], [NaN NaN], 'Color', [1 0 0], 'DisplayName', 'p < 0.001')
+        line([NaN NaN], [NaN NaN], 'Color', [1.0 0.6 0.6], 'DisplayName', 'p < 0.05 (inc)');
+        line([NaN NaN], [NaN NaN], 'Color', [0.8 0.2 0.2], 'DisplayName', 'p < 0.01 (inc)');
+        line([NaN NaN], [NaN NaN], 'Color', [0.6 0.0 0.0], 'DisplayName', 'p < 0.001 (inc)');
+        line([NaN NaN], [NaN NaN], 'Color', [0.6 0.6 1.0], 'DisplayName', 'p < 0.05 (dec)');
+        line([NaN NaN], [NaN NaN], 'Color', [0.2 0.2 0.8], 'DisplayName', 'p < 0.01 (dec)');
+        line([NaN NaN], [NaN NaN], 'Color', [0.0 0.0 0.6], 'DisplayName', 'p < 0.001 (dec)')
     ];
     legend(legend_elements, 'Location', 'northeast');
     

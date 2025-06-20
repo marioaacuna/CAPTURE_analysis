@@ -411,8 +411,8 @@ if isfield(pain_poses_results, 'common_across_modalities') && ...
     fig_common = figure('Name', 'Common_Pain_Poses', 'Position', [10, 300, 1500, 1200]);
     
     nclus = length(common_poses);
-    n_rows = ceil(sqrt(nclus));
-    n_cols = ceil(sqrt(nclus));
+    n_rows = 6;%ceil(sqrt(nclus));
+    n_cols = 3;%ceil(sqrt(nclus));
     
     logger(sprintf('Plotting %d common pain poses in %dx%d grid', nclus, n_rows, n_cols), 'INFO');
     
@@ -433,6 +433,7 @@ if isfield(pain_poses_results, 'common_across_modalities') && ...
             text(0.5, 0.5, sprintf('Error plotting\nCommon Pose %d', this_cls), ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
         end
+        axis square
         
         % Add title
         title(sprintf('Cluster %d\n(Common Pain Pose)', this_cls), 'FontSize', 10, 'FontWeight', 'bold');
