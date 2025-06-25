@@ -141,6 +141,7 @@ for pair_idx = 1:size(condition_pairs, 1)
     n_clusters = length(unique_clusters);
     observed_pain_dominance = zeros(n_clusters, 1);
     p_values = ones(n_clusters, 1);  % Initialize as non-significant
+    effect_sizes = zeros(n_clusters, 1);  % Cohen's d for proportion differences
     is_pain_pose = false(n_clusters, 1);
     
     logger(sprintf('Pain dominance threshold: %.1f%%, Permutations: %d', ...
@@ -158,12 +159,34 @@ for pair_idx = 1:size(condition_pairs, 1)
         if total_cluster_frames < 10
             observed_pain_dominance(c_idx) = 0;
             p_values(c_idx) = 1;
+            effect_sizes(c_idx) = 0;  % No meaningful effect size for low-count clusters
             continue;
         end
         
         % Calculate observed pain dominance ratio
         observed_ratio = pain_frames / total_cluster_frames;
         observed_pain_dominance(c_idx) = observed_ratio;
+        
+        % Calculate effect size (Cohen's d for proportion differences)
+        % Compare cluster proportion vs global proportion
+        % Cohen's d interpretation: 0.2=small, 0.5=medium, 0.8=large effect
+        global_pain_proportion = pain_total / (pain_total + control_total);
+        
+        % Calculate pooled standard error for proportions
+        p1 = observed_ratio;  % Cluster proportion (pain/(pain+control) in this cluster)
+        p2 = global_pain_proportion;  % Global proportion (overall pain/(pain+control))
+        
+        % Standard Cohen's d for proportions:
+        % d = (p1 - p2) / sqrt((p1*(1-p1) + p2*(1-p2))/2)
+        pooled_variance = (p1*(1-p1) + p2*(1-p2)) / 2;
+        
+        if pooled_variance > 0
+            cohens_d = (p1 - p2) / sqrt(pooled_variance);
+        else
+            cohens_d = 0;  % No variance, no effect
+        end
+        
+        effect_sizes(c_idx) = cohens_d;
         
         % Check if this cluster meets the pain pose criteria
         if observed_ratio >= pain_dominance_threshold
@@ -233,6 +256,7 @@ for pair_idx = 1:size(condition_pairs, 1)
     pain_poses_results.(results_field).all_clusters = unique_clusters;
     pain_poses_results.(results_field).observed_pain_dominance = observed_pain_dominance;
     pain_poses_results.(results_field).p_values = p_values;
+    pain_poses_results.(results_field).effect_sizes = effect_sizes;
     pain_poses_results.(results_field).is_pain_pose = is_pain_pose;
     pain_poses_results.(results_field).significant_clusters = significant_clusters;
     pain_poses_results.(results_field).pain_proportions = pain_proportions;    pain_poses_results.(results_field).control_proportions = control_proportions;
@@ -248,8 +272,9 @@ for pair_idx = 1:size(condition_pairs, 1)
         logger(sprintf('Top pain poses for %s:', comparison_name), 'INFO');
         for i = 1:min(5, length(sig_cluster_ids))
             cluster_id = sig_cluster_ids(i);
-            cluster_idx = find(unique_clusters == cluster_id);            logger(sprintf('  Cluster %d: p=%.4f, dominance=%.1f%%, pain_freq=%.3f, control_freq=%.3f', ...
-                cluster_id, p_values(cluster_idx), observed_pain_dominance(cluster_idx)*100, ...
+            cluster_idx = find(unique_clusters == cluster_id);
+            logger(sprintf('  Cluster %d: p=%.4f, d=%.2f, dominance=%.1f%%, pain_freq=%.3f, control_freq=%.3f', ...
+                cluster_id, p_values(cluster_idx), effect_sizes(cluster_idx), observed_pain_dominance(cluster_idx)*100, ...
                 pain_proportions(cluster_idx), control_proportions(cluster_idx)), 'INFO');
         end
     end
@@ -265,6 +290,12 @@ N_vs_H_poses = [];
 
 for field_idx = 1:length(field_names)
     field_name = field_names{field_idx};
+    
+    % Skip the common_across_modalities field as it has different structure
+    if strcmp(field_name, 'common_across_modalities')
+        continue;
+    end
+    
     results = pain_poses_results.(field_name);
     
     if strcmp(results.pain_condition, 'F')
@@ -326,6 +357,12 @@ field_names = fieldnames(pain_poses_results);
 
 for field_idx = 1:length(field_names)
     field_name = field_names{field_idx};
+    
+    % Skip the common_across_modalities field as it has different structure
+    if strcmp(field_name, 'common_across_modalities')
+        continue;
+    end
+    
     results = pain_poses_results.(field_name);
     
     if isempty(results.pain_clusters)
@@ -391,12 +428,12 @@ for field_idx = 1:length(field_names)
         logger(sprintf('Error saving figure: %s', ME.message), 'WARNING');
     end
     
-    % Also save as PNG
-    png_filename = fullfile(export_folder, [fig_name '.png']);
-    try
-        exportgraphics(fig_poses, png_filename, 'Resolution', 300);
-    catch ME
-        logger(sprintf('Error saving PNG: %s', ME.message), 'WARNING');    end
+    % % Also save as PNG
+    % png_filename = fullfile(export_folder, [fig_name '.png']);
+    % try
+    %     exportgraphics(fig_poses, png_filename, 'Resolution', 300);
+    % catch ME
+    %     logger(sprintf('Error saving PNG: %s', ME.message), 'WARNING');    end
 end
 
 %% Generate Common Pain Poses Visualization
@@ -452,13 +489,19 @@ if isfield(pain_poses_results, 'common_across_modalities') && ...
         logger(sprintf('Error saving common poses figure: %s', ME.message), 'WARNING');
     end
     
-    % Also save as PNG
-    common_png_filename = fullfile(export_folder, 'Common_Pain_Poses.png');
-    try
-        exportgraphics(fig_common, common_png_filename, 'Resolution', 300);
-    catch ME
-        logger(sprintf('Error saving common poses PNG: %s', ME.message), 'WARNING');
-    end
+    % % Also save as PNG
+    % common_png_filename = fullfile(export_folder, 'Common_Pain_Poses.png');
+    % try
+    %     exportgraphics(fig_common, common_png_filename, 'Resolution', 300);
+% Also save as PNG
+    % common_png_filename = fullfile(export_folder, 'Common_Pain_Poses.png');
+    % try
+    %     exportgraphics(fig_common, common_png_filename, 'Resolution', 300);
+    % catch ME
+    %     logger(sprintf('Error saving common poses PNG: %s', ME.message), 'WARNING');
+    % endfik    % catch ME
+    %     logger(sprintf('Error saving common poses PNG: %s', ME.message), 'WARNING');
+    % end
     
 else
     logger('No common pain poses to visualize', 'INFO');
@@ -473,6 +516,12 @@ row_idx = 1;
 
 for field_idx = 1:length(field_names)
     field_name = field_names{field_idx};
+    
+    % Skip the common_across_modalities field as it has different structure
+    if strcmp(field_name, 'common_across_modalities')
+        continue;
+    end
+    
     results = pain_poses_results.(field_name);
     
     for c_idx = 1:length(results.all_clusters)
@@ -483,6 +532,7 @@ for field_idx = 1:length(field_names)
         summary_table.Cluster_ID(row_idx) = cluster_id;
         summary_table.Pain_Dominance_Ratio(row_idx) = results.observed_pain_dominance(c_idx);
         summary_table.P_Value(row_idx) = results.p_values(c_idx);
+        summary_table.Effect_Size_Cohens_d(row_idx) = results.effect_sizes(c_idx);
         summary_table.Pain_Frequency(row_idx) = results.pain_proportions(c_idx);        summary_table.Control_Frequency(row_idx) = results.control_proportions(c_idx);
         summary_table.Is_Pain_Pose(row_idx) = results.is_pain_pose(c_idx);
         summary_table.Dominance_Threshold(row_idx) = results.pain_dominance_threshold;
@@ -518,10 +568,17 @@ fprintf(fid, 'Statistical Parameters:\n');
 fprintf(fid, '  - Significance level (α): %.3f\n', alpha_level);
 fprintf(fid, '  - Pain dominance threshold: %.0f%%\n', pain_dominance_threshold*100);
 fprintf(fid, '  - Number of permutations: %d\n', n_permutations);
+fprintf(fid, '  - Effect size metric: Cohen''s d (0.2=small, 0.5=medium, 0.8=large)\n');
 fprintf(fid, '\n');
 
 for field_idx = 1:length(field_names)
     field_name = field_names{field_idx};
+    
+    % Skip the common_across_modalities field as it has different structure
+    if strcmp(field_name, 'common_across_modalities')
+        continue;
+    end
+    
     results = pain_poses_results.(field_name);
       fprintf(fid, 'COMPARISON: %s\n', results.comparison_name);
     fprintf(fid, '----------------------------------------\n');
@@ -539,8 +596,8 @@ for field_idx = 1:length(field_names)
         for i = 1:length(sig_indices)
             idx = sig_indices(i);
             cluster_id = results.all_clusters(idx);
-            fprintf(fid, '  Cluster %d: p=%.4f, dominance=%.1f%%, pain_freq=%.3f, control_freq=%.3f\n', ...
-                cluster_id, results.p_values(idx), results.observed_pain_dominance(idx)*100, ...
+            fprintf(fid, '  Cluster %d: p=%.4f, d=%.2f, dominance=%.1f%%, pain_freq=%.3f, control_freq=%.3f\n', ...
+                cluster_id, results.p_values(idx), results.effect_sizes(idx), results.observed_pain_dominance(idx)*100, ...
                 results.pain_proportions(idx), results.control_proportions(idx));
         end
     else
