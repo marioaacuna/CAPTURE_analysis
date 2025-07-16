@@ -1,9 +1,9 @@
 %% Pramble
-% This script initializes the environment and configurations for 
+% This script initializes the environment and configurations for
 % retrieving and processing cluster data with concatenated predictions.
-% It sets up various parameters and paths, initializes structures, 
-% and prepares the workspace for further analysis. The script is 
-% designed to handle multiple animals and conditions, and includes 
+% It sets up various parameters and paths, initializes structures,
+% and prepares the workspace for further analysis. The script is
+% designed to handle multiple animals and conditions, and includes
 % options to overwrite existing data or add new features.
 
 
@@ -51,33 +51,33 @@ if run_pred_concat || overwrite_pred_concat
     % Initialize the aggregate predictions structure
     agg_predictions = struct();
     animal_condition_identifier = {};
-  
+
     % Current offset for tracking frames
     offset = 0;
 
     % Get all conditions from metadata
     conditions = fieldnames(metadata.conditions);
-    
+
     % Loop through each condition
     for condition_idx = 1:length(conditions)
         condition_name = conditions{condition_idx};
         condition_data = metadata.conditions.(condition_name);
-                
+
         % Loop through animals in this condition
+        try
         for animal_idx = 1:length(condition_data.animals)
             animal = condition_data.animals(animal_idx);
             animal_id = animal.id;
-            
+
             % Check if animal has 6cam recording
             if ~animal.has_6cam
                 warning('No 6cam recording found for animal %s in condition %s', animal_id, condition_name);
                 continue;
             end
-            
+
             % First construct path to animal folder
             animal_path = fullfile(metadata.data_root_dir, ...
                 condition_data.data_path, ...
-                '6cam_data', ...
                 animal.path);
 
             % Get the date folder (assuming it's the only folder in there that's a date)
@@ -89,7 +89,7 @@ if run_pred_concat || overwrite_pred_concat
                 warning('No date folder found for animal %s in condition %s', animal_id, condition_name);
                 continue;
             end
-    
+
             date_folder = date_folders(1).name;
             % Construct full path to predictions
             load_path = fullfile(animal_path, ...
@@ -105,9 +105,9 @@ if run_pred_concat || overwrite_pred_concat
 
             % Load predictions for the current animal and condition
             load(load_path); % loads 'predictions' structure
-            
+
             body_parts = fieldnames(predictions);
-            
+
             % Process each body part
             for k = 1:length(body_parts)
                 part_name = body_parts{k};
@@ -129,7 +129,7 @@ if run_pred_concat || overwrite_pred_concat
                     agg_predictions.(part_name) = predictions.(part_name);
                 end
             end
-                        
+
             % Update the animal_condition_identifier with repetition for each frame
             num_frames_for_current_combo = size(predictions.(body_parts{1}), 1);
             condition_letter = condition_to_letter(condition_name);
@@ -143,16 +143,21 @@ if run_pred_concat || overwrite_pred_concat
                 animal_condition_identifier = vertcat(animal_condition_identifier, new_identifiers);
             end
         end
+        catch me
+            disp([condition_name, ' - ' animal_id])
+            disp(me.message)
+            continue
+        end
     end
-    
+
     % Save concatenated predictions
     predictions = agg_predictions; % rename it to match further code
-
+    clear agg_predictions % to save ram
     save(filename_predictions, 'predictions', 'animal_condition_identifier', '-v7.3');
     disp('Saved concatenated predictions');
 else
     disp('predictions previously concatenated, now loading them')
-    load(filename_predictions)
+    load(filename_predictions, 'animal_condition_identifier') % No need to load preductions if they are saved already
 end
 
 
@@ -189,6 +194,7 @@ ratname ='myrat';% 'test_mouse';
 
 %% Load Mocapstruct
 mocapstruct = ratception_struct;
+clear ratception_struct % clear memmory
 if do_extra_features
     % In case you want to do some extra features
     savefilename_extra = fullfile(roothpath_CAPTURE, 'myextratsnefeature', 'extraMLFeatures.mat');
@@ -247,7 +253,7 @@ condition_inds = cond_inds; % sorting per condition
 for iff = 1:length(animal_list_used_after_analysis)
      animal_ID = animal_list_used_after_analysis{iff};
     condition_inds(iff) = double(endsWith(animal_ID, '_F') +1);
-   
+
 end
 % analysisstruct.condition_inds = condition_inds;
 % this does not work, see  compute_tsne_features.m line 144
@@ -259,21 +265,26 @@ analysisstruct.tsnegranularity = analysisparams.tsnegranularity;
 
 if ~exist(zvals_filename, 'file') || overwrite_zvals
 
-    %run tsne
-    disp('%% Running TSNE %%')
+
     % 1. Load extra features (Here we assume that the extra features were already done - powerful PC)
-    temp_dir = 'H:\Mario\DANNCE\CAPTURE_results\250131\extraFeatures'; % needs to be changed later
-    savefilename =fullfile(temp_dir,'myMLfeatures.mat');
-    MLmatobj_extra =matfile(savefilename);
-    jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
-    
-    
+    % 1. Most likely if we are running this script extra features are not
+    % created yet.
+    jt_features_extra = create_extra_behavioral_features(mocapstruct,'concate_mice',savefilename_extra,1,eigenposture_save_filder);
+
+    %
+    % temp_dir = 'H:\Mario\DANNCE\CAPTURE_results\250131\extraFeatures'; % needs to be changed later
+    % savefilename =fullfile(temp_dir,'myMLfeatures.mat');
+    % MLmatobj_extra =matfile(savefilename);
+    % jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
+    %
+
     % 2. Do TSNE
+    disp('%% Running TSNE %%')
     rng default % For reproducibility
     zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200);
 
     % OLD (only few features)-> zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
-    
+
     % 3. save zvals to then read later if necessary
     save(zvals_filename, 'zvals','-mat')
 
@@ -326,7 +337,7 @@ params.do_coarse = 0;
 % plot tsne
 plot_clustercolored_tsne(analysisstruct,1,params.watershed,h1,params)
 set(h1,'Position',([100 100 1100 1100]))
-  
+
 % bird specific axes
 axisparams.zlim = ([200 300]);
 axisparams.xlim = ([-400 400]);
@@ -371,7 +382,7 @@ params.corr_threshold = 0.2;% 0.2
 params.clustercutoff =0.65;%0.12; % 0.65
 analysisstruct.plotdirectory = '';
 %timescale to use, in seconds
-params.timescales = [1./4 2];  % this is in minutes, check the find_sequences_state_demo code 
+params.timescales = [1./4 2];  % this is in minutes, check the find_sequences_state_demo code
 
 analysisstruct.conditionnames = {'test'};
 analysisstruct.ratname = {ratname};
@@ -390,7 +401,7 @@ condition =1;
 %     if this_cls==0,  fprintf('\n'),continue, end
 %     animate_markers_nonaligned_fullmovie_demo(analysisstruct.mocapstruct_reduced_agg{1},...
 %         find(hierarchystruct.clustered_behavior{1}==this_cls), h, [], ['ic =  ',num2str(this_cls)]);
-% 
+%
 % end
 
 
@@ -418,6 +429,10 @@ function letter = condition_to_letter(condition_name)
             letter = 'H';  % H for sHam to avoid confusion with S for Saline
         case 'sni'
             letter = 'N';  % N for sNi
+        case 'car'
+            letter = 'C';
+        case 'gbp'
+            letter = 'G';
         otherwise
             error('Unknown condition: %s', condition_name);
     end
