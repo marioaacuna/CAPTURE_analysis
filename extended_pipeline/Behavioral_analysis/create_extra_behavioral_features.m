@@ -398,7 +398,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     rel_velocity_names = {'head','trunk','hipL','hipR','armL','armR','legL','legR'};
     rel_velocity_markers = {...
         [1, 2, 3], ...    % head: EarL(1), EarR(2), Snout(3)
-        [4,5,6,7,8], ...  % trunk: SpineF(4)-SpineM(5)-Tail_base_(6)-Tail_mid_(7)-Tail_end_(8)
+        [4,5,6], ...  % trunk: SpineF(4)-SpineM(5)-Tail_base_(6)-Tail_mid_(7)-Tail_end_(8) - Removed tail
         [19],    ...       % hipL: KneeL(19)
         [22], ...          % hipR: KneeR(22)
         [9,10,11],  ...    % armL: ForepawL(9), WristL(10), ElbowL(11)
@@ -531,8 +531,8 @@ if numel(framelist_true)>10 %need at least 1 s of data
         save(dyn_coeff_file_markers,'COEFFS_feat')
     end
 
-    figure(109)
-    plot3(ML_features.spectrogram_pcs_head(1:300:end,1),ML_features.spectrogram_pcs_head(1:300:end,2),ML_features.spectrogram_pcs_head(1:300:end,3),'+')
+    %figure(109)
+    %plot3(ML_features.spectrogram_pcs_head(1:300:end,1),ML_features.spectrogram_pcs_head(1:300:end,2),ML_features.spectrogram_pcs_head(1:300:end,3),'+')
 
 
 
@@ -568,8 +568,8 @@ if numel(framelist_true)>10 %need at least 1 s of data
     dyn_score_whitened = dyn_score;%bsxfun(@rdivide,pose_score,std(pose_score,[],1));
     ML_features.dyn_score = dyn_score_whitened(:,1:5);%num_eigenpcs);
 
-    figure(44)
-    plot(ML_features.dyn_score(:,3))
+    %figure(44)
+    %plot(ML_features.dyn_score(:,3))
     %% end euclidean dynamical features
     if (~overwrite_coeff)
         try

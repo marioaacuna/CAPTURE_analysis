@@ -18,17 +18,21 @@ fprintf('plotting density maps \n');
 if ~isfield(params,'reembed') || params.reembed == 0
 
 figure(480)
-for ll =1:num_conditions_true
-    [xx,yy,density_maps{ll}] = findPointDensity(tsnehere(find(analysisstruct.condition_inds==ll),:),...
-        density_width,[density_res density_res],[-density_max density_max]);
-    subplot(1,num_conditions_true+1,ll)
-    imagesc(flipud(density_maps{ll}))
-    %to try [f,xi] = ksdensity(x)
+n_plots = num_conditions_true + 1;
+grid_size = ceil(sqrt(n_plots));
+
+for ll = 1:num_conditions_true
+   [xx,yy,density_maps{ll}] = findPointDensity(tsnehere(find(analysisstruct.condition_inds==ll),:),...
+       density_width,[density_res density_res],[-density_max density_max]);
+   subplot(grid_size, grid_size, ll)
+   imagesc(flipud(density_maps{ll}))
+   axis square
 end
 
 [xx,yy,density_jt] = findPointDensity(tsnehere(:,:),density_width,[density_res density_res],[-density_max density_max]);
-subplot(1,num_conditions_true+1,num_conditions_true+1)
+subplot(grid_size, grid_size, num_conditions_true+1)
 imagesc(flipud(density_jt))
+axis square
 
 density_maps{num_conditions_true+1} = density_jt;
 analysisstruct_out.density_maps  = density_maps;
@@ -54,7 +58,6 @@ end
 
 figure(482)
 imagesc(flipud(density_watersheds{num_conditions}))
-
 
 % save parameters
 analysisstruct_out.density_watersheds = density_watersheds;
@@ -321,7 +324,7 @@ end
 %% make the visualization comparing the clusters
 figure(487)
 subplot(1,2,1)
-im=imagesc(flipud(Lnew))
+im=imagesc(flipud(Lnew));
 colorbar
 
 subplot(1,2,2)
