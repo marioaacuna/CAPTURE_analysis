@@ -162,7 +162,7 @@ end
 
 
 %%
-long_animal_frames_identifier = repelem(animal_condition_identifier,3);
+long_animal_frames_identifier = repelem(animal_condition_identifier,GC.repfactor);
 %% INIT ratception procedure
 filename_ratception = GC.filename_ratception;
 

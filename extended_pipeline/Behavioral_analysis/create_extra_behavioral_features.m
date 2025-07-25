@@ -551,7 +551,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
         agg_dyn = cat(2,agg_dyn,ML_features.(fn_ml{abs_fn(kk)}));
     end
     agg_dyn = agg_dyn';
-    dyn_mean = mean(agg_dyn(:,:),2);
+    dyn_mean = nanmean(agg_dyn(:,:),2);
     %center the pose
     centered_dyn = bsxfun(@minus,agg_dyn,dyn_mean);
     agg_dyn(abs(agg_dyn)>20) = 20;
@@ -1224,9 +1224,9 @@ if numel(framelist_true)>10 %need at least 1 s of data
     MLmatobj = matfile(savefilename);
 
     %% save after JA features
-    if (~overwrite_coeff)
+    % if (~overwrite_coeff)
         save(savefilename,'-struct','ML_features','-append','-v7.3');
-    end
+    % end
     ML_features = rmfield(ML_features,fieldnames(ML_features));
 
 
