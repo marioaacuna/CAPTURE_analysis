@@ -46,7 +46,21 @@ else
     run_pred_concat = 0;
 end
 
+
+function predictions_single = convert_to_single(predictions)
+    predictions_single = predictions;
+    body_parts = fieldnames(predictions);
+    
+    for i = 1:length(body_parts)
+        if isa(predictions.(body_parts{i}), 'double') && ~strcmp(body_parts{i}, 'sampleID')
+            predictions_single.(body_parts{i}) = single(predictions.(body_parts{i}));
+        end
+    end
+end
+
 if run_pred_concat || overwrite_pred_concat
+
+    
     disp('%% Running concatenation')
     % Initialize the aggregate predictions structure
     agg_predictions = struct();
@@ -107,6 +121,7 @@ if run_pred_concat || overwrite_pred_concat
             load(load_path); % loads 'predictions' structure
 
             body_parts = fieldnames(predictions);
+            predictions = convert_to_single(predictions);
 
             % Process each body part
             for k = 1:length(body_parts)
@@ -154,6 +169,7 @@ if run_pred_concat || overwrite_pred_concat
     predictions = agg_predictions; % rename it to match further code
     clear agg_predictions % to save ram
     save(filename_predictions, 'predictions', 'animal_condition_identifier', '-v7.3');
+    clear predictions
     disp('Saved concatenated predictions');
 else
     disp('predictions previously concatenated, now loading them')
@@ -217,8 +233,8 @@ mocapstruct.modular_cluster_properties.clipped_index{8} = 1:size(mocapstruct.ali
 % to control the wavelet parameters, you can change the properties in the
 % compute_wl_transform_features file
 
-
 if ~exist(MLmatobjfile,'file') || overwrite_MLmatobjfile
+    
     MLmatobj = create_behavioral_features(mocapstruct,coefficient_file,overwrite_coefficient,linkname);
     save(MLmatobjfile, 'MLmatobj', '-v7.3')
 else
