@@ -45,18 +45,21 @@ end
 
 %% do the move frames etc here to match the normal
 frameshere_temp = MLmatobj.frames_appendage_gps;
-framesuse = intersect(frameshere_temp{8},mocapstruct.move_frames);
+% framesuse = intersect(frameshere_temp{8},mocapstruct.move_frames);
 % framesuse = intersect(frameshere_temp{8},mocapstruct.rest_frames);
+framesuse = frameshere_temp{8};
 framesuse = framesuse(1:end-1);%in the old code but not sure why
 framesuse_sub = framesuse(1:analysisparams.tsnegranularity:numel(framesuse));
 
 a6 = framesuse_sub;
 
-[~,framesuse_aggfeat] = intersect(frameshere_temp{8},mocapstruct.move_frames);
-% [~,framesuse_aggfeat] = intersect(frameshere_temp{8},mocapstruct.rest_frames);
-framesuse_aggfeat = framesuse_aggfeat(1:end-1);
-framesuse_aggfeat = framesuse_aggfeat(1:analysisparams.tsnegranularity:numel(framesuse));
+% [~,framesuse_aggfeat] = intersect(frameshere_temp{8},mocapstruct.move_frames);
+% % [~,framesuse_aggfeat] = intersect(frameshere_temp{8},mocapstruct.rest_frames);
+% framesuse_aggfeat = framesuse_aggfeat(1:end-1);
+% framesuse_aggfeat = framesuse_aggfeat(1:analysisparams.tsnegranularity:numel(framesuse));
 
+framesuse_aggfeat = frameshere_temp{8};
+framesuse_aggfeat = framesuse_aggfeat(1:analysisparams.tsnegranularity:numel(frameshere_temp{8}));
 a6_agg = cat(1,a6_agg,bsxfun(@plus,reshape(a6,[],1),filelength_total));
 a6_agg_nooffset = cat(1,a6_agg_nooffset,reshape(a6,[],1));
 filelength_total = filelength_total+size(mocapstruct.aligned_mean_position,1);

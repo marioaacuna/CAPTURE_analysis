@@ -1,4 +1,40 @@
 function ML_features = compute_wl_transform_features_demo(~,ML_features,coeffstruct_in,overwrite_coeff)
+global GC
+
+% Memory optimization: Save ML_features to temporary matfile and work with matfile object
+fprintf('Saving ML_features to temporary file to reduce memory usage...\n');
+temp_ml_file = [tempname, '_ML_features.mat'];
+save(temp_ml_file, 'ML_features', '-v7.3');
+
+% Create matfile object for efficient memory access
+ml_matfile = matfile(temp_ml_file, 'Writable', true);
+
+% Load only the minimal required fields into memory
+appendage_anglegps = ml_matfile.ML_features.appendage_anglegps;
+fprintf('ML_features saved to temp file. Working with matfile object to minimize memory usage.\n');
+
+% Clear the large ML_features structure from memory
+clear ML_features;
+
+if exist(coeffstruct_in,'file')
+    try
+        coeffstruct = load(coeffstruct_in);
+    catch ME
+        coeffstruct = load(coeffstruct_in);
+    end
+else
+    coeffstruct = struct();
+end
+
+% Create matfile object for efficient memory access
+ml_matfile = matfile(temp_ml_file, 'Writable', true);
+
+% Load only the minimal required fields into memory
+appendage_anglegps = ml_matfile.ML_features.appendage_anglegps;
+fprintf('ML_features saved to temp file. Working with matfile object to minimize memory usage.\n');
+
+% Clear the large ML_features structure from memory
+clear ML_features;
 
 if exist(coeffstruct_in,'file')
     try
@@ -11,7 +47,8 @@ else
 end
 
 %% spectrogram parameters
-opts.fps = 300./1;
+opts.fps = GC.upsampling_to;%300./1;
+
 opts.clustering_window = opts.fps./2;
 opts.clustering_overlap = opts.fps./4;
 opts.numclusters = 100;
@@ -22,9 +59,9 @@ opts.whiten = 0;
 opts.frameNormalize = 0;
 opts.clustermethod = 'GMM';
 opts.ds = 1;
-opts.samprate = 100;
+opts.samprate = GC.upsampling_to;
 opts.params = struct;
-opts.params.samplingFreq = 100;
+opts.params.samplingFreq = GC.upsampling_to;
 opts.params.numPeriods = 25;
 opts.params.minF = 1;
 opts.params.maxF = 25;
@@ -36,19 +73,20 @@ opts.numclusters = 100;
 opts.lambda = 0.1;
 num_spectrogram_pcs = 15;
 
-params.fps = 300;
+% params.fps = 300;
+params.fps = GC.upsampling_to;
 params.difforder = 10;
 params.medfiltorder = 3;
 params.gaussorder = 2.5;
 
 %% Pre-allocate with reasonable sizes - SINGLE PRECISION
-COEFFS_feat_wl_appendages = cell(1,numel(ML_features.appendage_anglegps));
-dyadic_spectrograms_score_wl_appendages = cell(1,numel(ML_features.appendage_anglegps));
-explained_wl_appendages = cell(1,numel(ML_features.appendage_anglegps));
+COEFFS_feat_wl_appendages = cell(1,numel(appendage_anglegps));
+dyadic_spectrograms_score_wl_appendages = cell(1,numel(appendage_anglegps));
+explained_wl_appendages = cell(1,numel(appendage_anglegps));
 
-COEFFS_feat_wl_appendages_euc = cell(1,numel(ML_features.appendage_anglegps));
-dyadic_spectrograms_score_wl_appendages_euc = cell(1,numel(ML_features.appendage_anglegps));
-explained_wl_appendages_euc = cell(1,numel(ML_features.appendage_anglegps));
+COEFFS_feat_wl_appendages_euc = cell(1,numel(appendage_anglegps));
+dyadic_spectrograms_score_wl_appendages_euc = cell(1,numel(appendage_anglegps));
+explained_wl_appendages_euc = cell(1,numel(appendage_anglegps));
 
 dHipass = designfilt('highpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', hipass_val/(params.fps/2), ...
     'DesignMethod', 'butter');
@@ -57,15 +95,20 @@ dHipass = designfilt('highpassiir', 'FilterOrder', 3, 'HalfPowerFrequency', hipa
 for kk = 8
     fprintf('starting group %i joint angles \n',kk)
     
-    if size(ML_features.appendage_joint_angles_pcs_hipass{kk},1) > 10*1
+    % Load only the required data for this iteration from matfile
+    fprintf('Loading appendage_joint_angles_pcs_hipass{%d} from matfile...\n', kk);
+    appendage_joint_angles_pcs_hipass_kk = ml_matfile.ML_features.appendage_joint_angles_pcs_hipass(1,kk);
+    appendage_joint_angles_pcs_hipass_kk = appendage_joint_angles_pcs_hipass_kk{1};
+    
+    if size(appendage_joint_angles_pcs_hipass_kk,1) > 10*1
         
         %% JOINT ANGLES WAVELETS - SINGLE PRECISION
         agg_features_wl = single([]);
-        num_components = size(ML_features.appendage_joint_angles_pcs_hipass{kk},2);
+        num_components = size(appendage_joint_angles_pcs_hipass_kk,2);
         
         for ll = 1:num_components
             % Clean data - force single precision
-            frame_data = single(ML_features.appendage_joint_angles_pcs_hipass{kk}(:,ll));
+            frame_data = single(appendage_joint_angles_pcs_hipass_kk(:,ll));
             frame_data(isnan(frame_data) | isinf(frame_data)) = 0;
             
             % Filter and process
@@ -115,7 +158,7 @@ for kk = 8
             dyadic_spectrograms_score_wl_appendages{kk}(:,1:num_pcs_to_keep), replication_factor_wl, 1));
         
         %% Size adjustment - SINGLE PRECISION
-        target_size = size(ML_features.appendage_joint_angles_pcs_hipass{kk}, 1);
+        target_size = size(appendage_joint_angles_pcs_hipass_kk, 1);
         current_size = size(dyadic_spectrograms_score_wl_appendages{kk}, 1);
         
         if current_size < target_size
@@ -133,11 +176,18 @@ for kk = 8
         
         %% EUCLIDEAN WAVELETS - SINGLE PRECISION (same pattern)
         fprintf('starting group %f euclidean \n',kk)
+        
+        % Load euclidean data from matfile and clear the joint angles data
+        clear appendage_joint_angles_pcs_hipass_kk  % Free memory
+        fprintf('Loading appendage_pca_score_euc_hipassclip{%d} from matfile...\n', kk);
+        appendage_pca_score_euc_hipassclip_kk = ml_matfile.ML_features.appendage_pca_score_euc_hipassclip(1,kk);
+        appendage_pca_score_euc_hipassclip_kk = appendage_pca_score_euc_hipassclip_kk{1};
+        
         agg_features_wl_euc = single([]);
         
-        for ll = 1:size(ML_features.appendage_pca_score_euc_hipassclip{kk},2)
+        for ll = 1:size(appendage_pca_score_euc_hipassclip_kk,2)
             % Clean data
-            frame_data = single(ML_features.appendage_pca_score_euc_hipassclip{kk}(:,ll));
+            frame_data = single(appendage_pca_score_euc_hipassclip_kk(:,ll));
             frame_data(isnan(frame_data) | isinf(frame_data)) = 0;
             
             frame_fragment = single(filtfilt(f1_hipass, f2_hipass, frame_data));
@@ -194,24 +244,27 @@ for kk = 8
         dyadic_spectrograms_score_wl_appendages_euc{kk} = single(cat(1, dyadic_spectrograms_score_wl_appendages_euc{kk}, final_row_euc));
         clear final_row_euc
         
-        %% Store results - SINGLE PRECISION
-        ML_features.COEFFS_feat_wl_appendages_euc{kk} = COEFFS_feat_wl_appendages_euc{kk};
-        ML_features.dyadic_spectrograms_score_wl_appendages_euc{kk} = dyadic_spectrograms_score_wl_appendages_euc{kk};
-        ML_features.explained_wl_appendages_euc{kk} = explained_wl_appendages_euc{kk};
+        % Clear euclidean data from memory
+        clear appendage_pca_score_euc_hipassclip_kk
         
-        ML_features.COEFFS_feat_wl_appendages{kk} = COEFFS_feat_wl_appendages{kk};
-        ML_features.dyadic_spectrograms_score_wl_appendages{kk} = dyadic_spectrograms_score_wl_appendages{kk};
-        ML_features.explained_wl_appendages{kk} = explained_wl_appendages{kk};
+        %% Store results back to matfile - SINGLE PRECISION
+        ml_matfile.ML_features.COEFFS_feat_wl_appendages_euc(1,kk) = {COEFFS_feat_wl_appendages_euc{kk}};
+        ml_matfile.ML_features.dyadic_spectrograms_score_wl_appendages_euc(1,kk) = {dyadic_spectrograms_score_wl_appendages_euc{kk}};
+        ml_matfile.ML_features.explained_wl_appendages_euc(1,kk) = {explained_wl_appendages_euc{kk}};
+        
+        ml_matfile.ML_features.COEFFS_feat_wl_appendages(1,kk) = {COEFFS_feat_wl_appendages{kk}};
+        ml_matfile.ML_features.dyadic_spectrograms_score_wl_appendages(1,kk) = {dyadic_spectrograms_score_wl_appendages{kk}};
+        ml_matfile.ML_features.explained_wl_appendages(1,kk) = {explained_wl_appendages{kk}};
         
     else
-        %% Empty case
-        ML_features.COEFFS_feat_wl_appendages_euc{kk} = [];
-        ML_features.dyadic_spectrograms_score_wl_appendages_euc{kk} = [];
-        ML_features.explained_wl_appendages_euc{kk} = [];
+        %% Empty case - store empty arrays to matfile
+        ml_matfile.ML_features.COEFFS_feat_wl_appendages_euc(1,kk) = {[]};
+        ml_matfile.ML_features.dyadic_spectrograms_score_wl_appendages_euc(1,kk) = {[]};
+        ml_matfile.ML_features.explained_wl_appendages_euc(1,kk) = {[]};
         
-        ML_features.COEFFS_feat_wl_appendages{kk} = [];
-        ML_features.dyadic_spectrograms_score_wl_appendages{kk} = [];
-        ML_features.explained_wl_appendages{kk} = [];
+        ml_matfile.ML_features.COEFFS_feat_wl_appendages(1,kk) = {[]};
+        ml_matfile.ML_features.dyadic_spectrograms_score_wl_appendages(1,kk) = {[]};
+        ml_matfile.ML_features.explained_wl_appendages(1,kk) = {[]};
     end
 end
 
@@ -225,6 +278,17 @@ try
     save(coeffstruct_in,'-struct','coeffstruct','-v7.3')
 catch ME
     save(coeffstruct_in,'-struct','coeffstruct','-v7.3')
+end
+
+%% Load final ML_features from matfile and cleanup
+fprintf('Loading final ML_features from matfile and cleaning up...\n');
+ML_features = ml_matfile.ML_features;
+
+% Clean up temporary file
+clear ml_matfile;
+if exist(temp_ml_file, 'file')
+    delete(temp_ml_file);
+    fprintf('Temporary matfile deleted.\n');
 end
 
 end

@@ -22,7 +22,7 @@ if nargin<3 || isempty(opts);
     num = size(features,1); % number modes (spectrograms to find) (usually want full dimension)
     % num = pcuse;
     ds = 1; % down sampling
-	samprate = 245;
+	samprate = int(0.81 * GC.upsampling_to); %245 
     params = struct;
     params.samplingFreq = samprate/ds;
     params.numPeriods=50; %distinct number of frequencies to use

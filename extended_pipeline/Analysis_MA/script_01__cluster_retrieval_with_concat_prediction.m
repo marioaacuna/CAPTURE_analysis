@@ -33,7 +33,12 @@ if ~exist(rootpath, 'dir'), mkdir(rootpath); end
 % Read metadata from YAML
 metadata = readExperimentMetadata();
 
+disp('**************** PROCESSING **************************')
+disp(['Processing FREQ : ', num2str(GC.upsampling_to)])
+disp(['Upsampled ', num2str(GC.repfactor), '  times'])
+disp('******************************************************')
 % Initialize structures
+
 agg_predictions = struct();
 animal_condition_identifier = {};
 
@@ -50,7 +55,7 @@ end
 function predictions_single = convert_to_single(predictions)
     predictions_single = predictions;
     body_parts = fieldnames(predictions);
-    
+
     for i = 1:length(body_parts)
         if isa(predictions.(body_parts{i}), 'double') && ~strcmp(body_parts{i}, 'sampleID')
             predictions_single.(body_parts{i}) = single(predictions.(body_parts{i}));
@@ -60,7 +65,7 @@ end
 
 if run_pred_concat || overwrite_pred_concat
 
-    
+
     disp('%% Running concatenation')
     % Initialize the aggregate predictions structure
     agg_predictions = struct();
@@ -71,6 +76,7 @@ if run_pred_concat || overwrite_pred_concat
 
     % Get all conditions from metadata
     conditions = fieldnames(metadata.conditions);
+    disp(conditions)
 
     % Loop through each condition
     for condition_idx = 1:length(conditions)
@@ -82,7 +88,7 @@ if run_pred_concat || overwrite_pred_concat
         for animal_idx = 1:length(condition_data.animals)
             animal = condition_data.animals(animal_idx);
             animal_id = animal.id;
-
+            disp(animal_id)
             % Check if animal has 6cam recording
             if ~animal.has_6cam
                 warning('No 6cam recording found for animal %s in condition %s', animal_id, condition_name);
@@ -188,7 +194,7 @@ input_params = struct();
 input_params.SpineF_marker = 'SpineF';
 input_params.SpineM_marker = 'SpineM';
 % input_params.repfactor = 300/30;
-input_params.repfactor = GC.repfactor; % round(300/init_frame_rate);
+i1nput_params.repfactor = GC.repfactor; % round(300/init_frame_rate);
 input_params.conversion_factor = 1;
 
 % Run prepro if it doesn't exist
@@ -213,6 +219,7 @@ mocapstruct = ratception_struct;
 clear ratception_struct % clear memmory
 if do_extra_features
     % In case you want to do some extra features
+    mkdir(fullfile(roothpath_CAPTURE, 'myextratsnefeature'))
     savefilename_extra = fullfile(roothpath_CAPTURE, 'myextratsnefeature', 'extraMLFeatures.mat');
     eigenposture_save_filder = fullfile(roothpath_CAPTURE, 'myextratsnefeature');
 end
@@ -234,7 +241,7 @@ mocapstruct.modular_cluster_properties.clipped_index{8} = 1:size(mocapstruct.ali
 % compute_wl_transform_features file
 
 if ~exist(MLmatobjfile,'file') || overwrite_MLmatobjfile
-    
+
     MLmatobj = create_behavioral_features(mocapstruct,coefficient_file,overwrite_coefficient,linkname);
     save(MLmatobjfile, 'MLmatobj', '-v7.3')
 else
@@ -285,19 +292,28 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
     % 1. Load extra features (Here we assume that the extra features were already done - powerful PC)
     % 1. Most likely if we are running this script extra features are not
     % created yet.
-    jt_features_extra = create_extra_behavioral_features(mocapstruct,'concate_mice',savefilename_extra,1,eigenposture_save_filder);
+    jt_features_extra_obj = create_extra_behavioral_features(mocapstruct,'concate_mice',savefilename_extra,0,eigenposture_save_filder);
 
     %
     % temp_dir = 'H:\Mario\DANNCE\CAPTURE_results\250131\extraFeatures'; % needs to be changed later
     % savefilename =fullfile(temp_dir,'myMLfeatures.mat');
-    % MLmatobj_extra =matfile(savefilename);
-    % jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
+    MLmatobj_extra =matfile(savefilename_extra);
+
+    mocapstruct.move_frames = 1:size(mocapstruct.aligned_mean_position,1);
+    jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
     %
 
     % 2. Do TSNE
     disp('%% Running TSNE %%')
     rng default % For reproducibility
-    zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200);
+    D = cat(2,analysisstruct.jt_features,jt_features_extra);
+    X_clean = fillmissing(D, 'linear');
+    zvals = tsne(X_clean, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1, 'LearnRate',1200);
+
+    %zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 5,'verbose',1, 'LearnRate',1000);
+
+
+    % zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 5,'verbose',1, 'LearnRate',1000);
 
     % OLD (only few features)-> zvals = tsne(analysisstruct.jt_features, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1,'LearnRate', 1200); %perplexity 90 works well too (less nr of clusters), but maybe not recommended due to few nr of frames (see length(analysisstruct.jt_features))
 
@@ -306,12 +322,14 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
 
     % Plot TSNE per animal
     figure(1)
-    gscatter(zvals(:,1), zvals(:,2), cond_inds)
+    gscatter(zvals(:,1), zvals(:,2), cond_inds(1:end-1))
     % plot(zvals(:,1),zvals(:,2),'ob','MarkerFaceColor','b', 'MarkerSize',2)
     title({['Granu: ',num2str(analysisparams.tsnegranularity)], ['Perp: ', num2str(perplexity)]})
     set(gcf,'Position',([100 100 1100 1100]))
     set(gcf, 'color', 'w')
     analysisstruct.extra_jt_features = jt_features_extra;
+    print('Saving analysis struct ...')
+    save(analysis_filename, 'analysisstruct' , '-v7.3')
 
 else
     disp(' Loading TSNE zvals')
@@ -359,8 +377,8 @@ axisparams.zlim = ([200 300]);
 axisparams.xlim = ([-400 400]);
 axisparams.ylim = ([-400 400]);
 
-cluster_figure_filename = fullfile(GC.figure_folder, 'Tsne_clusters.pdf');
-export_fig(cluster_figure_filename, '-pdf', h1)
+cluster_figure_filename = fullfile(rootpath,'Tsne_clusters.pdf');
+exportgraphics(h1, cluster_figure_filename)
 
 %% Plot cluster poses
 [cls, c_idx, r] = unique(analysisstruct.annot_reordered{end}, 'stable');
@@ -370,7 +388,7 @@ if plot_poses
     % h= figure(370);
     % clf;
 
-    fig_poses = figure('pos', [10,300,1500,1900]);
+    fig_poses = figure('pos', [10,10,1500,1200]);
     nclus = numel(cls);
     n_rows = ceil(sqrt(nclus));
     n_cols = ceil(sqrt(nclus));
@@ -384,8 +402,8 @@ if plot_poses
     end
 end
 % save cluster plot
-cluster_poses_figure_filename = fullfile(GC.figure_folder, 'Poses_clusters.pdf');
-export_fig(cluster_poses_figure_filename, '-pdf', fig_poses)
+cluster_poses_figure_filename = fullfile(rootpath, 'Poses_clusters.pdf');
+exportgraphics(fig_poses, cluster_poses_figure_filename)
 
 %% run sequence and state analysis
 params.do_show_pdistmatrix =1;
@@ -423,7 +441,9 @@ condition =1;
 
 
 %% save analysis
+print('saving analysis struct ...')
 save(analysis_filename, 'analysisstruct' , '-v7.3')
+print('CAPTURE processing done!!')
 
 
 %% This is the end of the analysis script

@@ -1,16 +1,17 @@
 function MLmatobj = create_extra_behavioral_features(mocapstruct,ratname,savefilename,overwrite_coeff,eigenposture_save_folder)
 
-
+global GC
 %% local pose/dynamics features
 % load saved eigenposture feature coefficients and dynamics coefficients
 %eigenposture_save_folder = '';
-
-decimation_factor = 3;
+% keyboard % TODO, set for 100hz and not 300 -  GC.upsampling_to;
+decimation_factor = GC.repfactor; %3;
 %parameters for hipass clip and clustering
-params.fps = 300;
+params.fps = GC.upsampling_to; %300;
+
 
 %% spectrogram parameters
-opts.fps =300./1;
+opts.fps =GC.upsampling_to./1;
 opts.clustering_window = opts.fps./2;
 opts.clustering_overlap = opts.fps./4;
 num_eigenpcs = 10;%size(COEFF,1);
@@ -43,7 +44,7 @@ framelist_true = mocapstruct.modular_cluster_properties.clipped_index{8};%inters
 
 ML_features.framelist_true = framelist_true;
 %overwrite saved file
-% save(savefilename,'-struct','ML_features','-v7.3');
+%save(savefilename,'-struct','ML_features','-v7.3');
 if numel(framelist_true)>10 %need at least 1 s of data
 
     %% ---------------------------------------------------------------------
@@ -164,12 +165,12 @@ if numel(framelist_true)>10 %need at least 1 s of data
     % ML_features.ext_left_paw = abs(mocapstruct.markers_aligned_preproc.KneeL(framelist_true,3))+ abs(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3));
     % % guarding left paw
     % ML_features.guard_left_paw = abs(mocapstruct.markers_aligned_preproc.KneeL(framelist_true,3))-abs(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3));
-    % 
-    % 
-    % 
+    %
+    %
+    %
     % %low rear -- shortens stance more and more
     % ML_features.low_rear = mocapstruct.markers_aligned_preproc.Snout(framelist_true,3)-mocapstruct.markers_aligned_preproc.SpineF(framelist_true,3);
-    % 
+    %
     % %l/r groom
     % ML_features.RGroom = mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1)-mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1);
     % ML_features.LGroom =mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1)-mocapstruct.markers_aligned_preproc.SpineF(framelist_true,1);
@@ -178,12 +179,12 @@ if numel(framelist_true)>10 %need at least 1 s of data
     body_length = mean(vectornorm(mocapstruct.markers_aligned_preproc.SpineF, mocapstruct.markers_aligned_preproc.Tail_base_, 2));
     ML_features.high_rear = (mocapstruct.markers_aligned_preproc.Snout(framelist_true,3) - ...
                             mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,3)) / body_length;
-    
+
     % Dynamic paw elevation (better guarding metric)
     ML_features.guard_left_paw = vectornorm(...
         mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), ...
         mocapstruct.markers_aligned_preproc.SpineM(framelist_true,:), 2);  % Distance paw to mid-spine
-    
+
     % Limb extension angle (more biomechanically meaningful)
     vec_knee_paw = mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:) - ...
                   mocapstruct.markers_aligned_preproc.KneeL(framelist_true,:);
@@ -191,34 +192,34 @@ if numel(framelist_true)>10 %need at least 1 s of data
                   mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,:);
     ML_features.ext_left_paw = acosd(dot(vec_knee_paw, vec_hip_knee, 2)./...
         (vecnorm(vec_knee_paw,2,2).*vecnorm(vec_hip_knee,2,2)));  % Knee joint angle
-    
+
     %% Pain-Specific Features
     % 1. Licking/Biting Detection (Formalin)
     ML_features.lick_bite_left = vectornorm(...
         mocapstruct.markers_aligned_preproc.Snout(framelist_true,:), ...
         mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), 2);  % Direct snout-paw distance
-    
+
     % 2. Weight-Bearing Asymmetry (SNI)
     ML_features.weight_asymmetry = abs(...
         mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,3) - ...
         mocapstruct.markers_aligned_preproc.HindpawR(framelist_true,3));  % Vertical load difference
-    
-    % 3. Protective Hunched Posture 
+
+    % 3. Protective Hunched Posture
     spine_curvature = vectornorm(...
         mocapstruct.markers_aligned_preproc.SpineF(framelist_true,:), ...
         mocapstruct.markers_aligned_preproc.Tail_base_(framelist_true,:), 2);
     ML_features.hunch_ratio = spine_curvature / body_length;  % Lower values = more hunched
-    
+
     % 4. Lateral Weight Shift (Avoiding injured limb)
     ML_features.lateral_shift = ...
         mocapstruct.markers_aligned_preproc.SpineM(framelist_true,1) - ...
         mean([mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,1), ...
               mocapstruct.markers_aligned_preproc.HindpawR(framelist_true,1)], 2);
-    
-    % 5. Tail Stiffness Index 
+
+    % 5. Tail Stiffness Index
     tail_movement = vecnorm(diff(mocapstruct.markers_aligned_preproc.Tail_end_(framelist_true,:)), 2, 2);
     ML_features.tail_stiffness = 1 - (tail_movement / max(tail_movement));  % 1=rigid, 0=mobile
-    
+
     % 6. Protective Paw Clustering
     ML_features.paw_clustering = mean([
         vectornorm(mocapstruct.markers_aligned_preproc.HindpawL(framelist_true,:), ...
@@ -359,7 +360,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     downsample = 3;
     frames_use = 1:downsample: maxframes;
     clustering_ind = frames_use; %intersect with the chunking
-    cluster_fps = 300./downsample;
+    cluster_fps = GC.upsampling_to; %300./downsample;
     opts.num = 1; % number modes (spectrograms to find) (usually want full dimension)
 
     %% setup cluster properties
@@ -373,7 +374,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     opts.params.samplingFreq = 100;
     opts.params.numPeriods=25; %distinct number of frequencies to use
     opts.params.minF = 0.5; % min freq to analyze
-    opts.params.maxF = 60; % max freq to analyze
+    opts.params.maxF = 50;%60; % max freq to analyze
 
 
 
@@ -389,7 +390,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     params.gaussorder = 2.5;
     ML_features.trunk_vel =zeros(numel(difforders),numel(framelist_true));
     ML_features.head_vel =zeros(numel(difforders),numel(framelist_true));
-    % 
+    %
     %% Relative velocity markers and names (updated indices)
     velcomp_names = {'abs','x','y','z'};
     absolute_velocity_names = {'trunk'};
@@ -409,7 +410,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     % velcomp_names = {'abs','x','y','z'};
     % absolute_velocity_names = {'trunk'};
     % absolute_velocity_markers = {[4:8]};
-    % 
+    %
     % rel_velocity_names = {'head','trunk','hipL','hipR','armL','armR','legL','legR'};
     % rel_velocity_markers = {[1:3],[4,5],[14],[16],[9,10],[11,12],[13,14],[15,16]};
     num_spectrogram_pcs= 15;
@@ -464,7 +465,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     end
 
     %% get the pcs of the spectrogram of markers
-    opts.clustering_overlap = 75;
+    % opts.clustering_overlap = 75; same as in the other case (see below, we trust the opts as called at the beginning od the code)
     for kk = 1:4%numel(rel_velocity_names)
         fprintf('computing spectrograms for markers %f \n',kk)
 
@@ -476,7 +477,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
         %  [dyadic_spectrograms,fr,~] = get_dyadic_spectrogram( agg_features_here',opts);
         dyadic_spectrograms = [];
         params.tapers = [5 7];
-        params.Fs = 300;
+        params.Fs = GC.upsampling_to; %300;
 
 
 
@@ -1142,7 +1143,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     end
 
     %% compute the marker spectrograms
-    opts.clustering_overlap = 75;
+    % opts.clustering_overlap = 75; % this was hardcoded for 300 (300/4=75, but maybe we leave it as it's stated at the beginning of the code, therefore we comment this out)
     for kk = 1:numel(angle_lists)
         ML_features.angle_names{kk} = (angle_lists{kk});
         fprintf('computing spectrograms for markers %f \n',kk)
