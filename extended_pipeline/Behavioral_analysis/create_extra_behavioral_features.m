@@ -130,7 +130,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
     %loop over all spectrograms
     if (~exist(dyn_coeff_file,'file') || overwrite_coeff)
         for ll = 1:size(dyadic_spectrograms_reshaped,2)
-            [COEFF_dyn, SCORE, LATENT, TSQUARED,EXPLAINED] = pca(squeeze(dyadic_spectrograms_reshaped(:,ll,:))');
+            [COEFF_dyn, ~ , ~ , ~ ,~ ] = pca(squeeze(dyadic_spectrograms_reshaped(:,ll,:))');
             eigenpose_dynamics_coeffs(ll,:,:) = COEFF_dyn(:,1:num_dynamics_pcs);
         end
         save(dyn_coeff_file,'eigenpose_dynamics_coeffs');
@@ -559,7 +559,8 @@ if numel(framelist_true)>10 %need at least 1 s of data
     % if doesnt exist compute eigenposture feature coefficients and dynamics
     % % coefficients
     % if (~exist(dyn_coeff_file_2,'file') || overwrite_coeff)
-    [COEFF, SCORE, LATENT, TSQUARED,EXPLAINED] = pca(agg_dyn(:,:)');
+    [COEFF, SCORE, LATENT, TSQUARED,EXPLAINED] = pca(agg_dyn(:,1:3:end)');% pca(agg_dyn(:,:)');
+
     %     save(pose_coeff_file,'COEFF');
     % else
     %     load(pose_coeff_file);
@@ -978,6 +979,11 @@ if numel(framelist_true)>10 %need at least 1 s of data
         load(eig_jadyn_coeff_file)
     end
 
+    % clean up memory
+    save(savefilename,'-struct','ML_features','-append');
+    % end
+    ML_features = rmfield(ML_features,fieldnames(ML_features));
+
 
     %% look at pcs of the eigenangles
     agg_features=[];
@@ -1046,11 +1052,26 @@ if numel(framelist_true)>10 %need at least 1 s of data
     ML_features.ja_eig_spectrogrampcs_coeff = COEFFS_feat;
     ML_features.ja_eig_wlpcs_coeff = COEFFS_feat_wl;
 
+    % clean up memory
+    save(savefilename,'-struct','ML_features','-append');
+    % end
+    ML_features = rmfield(ML_features,fieldnames(ML_features));
+    clear agg_features dyadic_spectrograms_score dyadic_spectrograms_score_wl
+
+    %% save coefficients
+    if (~exist( eig_jadyn_coeff_file,'file') || overwrite_coeff)
+        save( eig_jadyn_coeff_file,'COEFFS_feat','explained','COEFFS_feat_wl','explained_wl')
+
+    end
+
+
     %% also compute the wavelet for the appendages
     COEFFS_feat_wl_appendages = cell(1,numel(appendage_anglegps));
     dyadic_spectrograms_score_wl_appendages= cell(1,numel(appendage_anglegps));
     explained_wl_appendages = cell(1,numel(appendage_anglegps));
-
+    temp_ = load(savefilename, "appendage_pca_score");
+    ML_features.appendage_pca_score = temp_.appendage_pca_score;
+    clear temp_
     for kk = 1:numel(appendage_anglegps)
         agg_features_wl = [];
         for ll = 1:size(ML_features.appendage_pca_score{kk},2)
@@ -1085,12 +1106,11 @@ if numel(framelist_true)>10 %need at least 1 s of data
     ML_features.COEFFS_feat_wl_appendages = COEFFS_feat_wl_appendages;
     ML_features.dyadic_spectrograms_score_wl_appendages = dyadic_spectrograms_score_wl_appendages;
     ML_features.explained_wl_appendages = explained_wl_appendages;
-
-    %% save coefficients
-    if (~exist( eig_jadyn_coeff_file,'file') || overwrite_coeff)
-        save( eig_jadyn_coeff_file,'COEFFS_feat','explained','COEFFS_feat_wl','explained_wl')
-
-    end
+    
+    % clean up memory
+    save(savefilename,'-struct','ML_features','-append');
+    % end
+    ML_features = rmfield(ML_features,fieldnames(ML_features));
 
     %% dynamics of the joint angles -- are they cleaner?
     head_angles = {'head_sagg','head_trans','neck_sagg','neck_trans','head_coronal'};
@@ -1112,6 +1132,10 @@ if numel(framelist_true)>10 %need at least 1 s of data
 
 
     %% Compute the JA velocity
+    temp_ = load(savefilename, "joint_angles");
+    ML_features.joint_angles = temp_.joint_angles;
+    clear temp_
+
     difforders = [100,300];
     params.difforder = 10;
     params.medfiltorder = 3;
@@ -1142,7 +1166,17 @@ if numel(framelist_true)>10 %need at least 1 s of data
         end
     end
 
+    % clean up memory
+    save(savefilename,'-struct','ML_features','-append');
+    % end
+    ML_features = rmfield(ML_features,fieldnames(ML_features));
+
+
+
     %% compute the marker spectrograms
+    temp_ = load(savefilename, "joint_angles");
+    ML_features.joint_angles = temp_.joint_angles;
+    clear temp_
     % opts.clustering_overlap = 75; % this was hardcoded for 300 (300/4=75, but maybe we leave it as it's stated at the beginning of the code, therefore we comment this out)
     for kk = 1:numel(angle_lists)
         ML_features.angle_names{kk} = (angle_lists{kk});
@@ -1216,6 +1250,155 @@ if numel(framelist_true)>10 %need at least 1 s of data
         ML_features.ja_dyn_explained = explained{kk};
     end
 
+%     %% compute the marker spectrograms - MEMORY OPTIMIZED
+% % opts.clustering_overlap = 75; % this was hardcoded for 300 (300/4=75, but maybe we leave it as it's stated at the beginning of the code, therefore we comment this out)
+% 
+% for kk = 1:numel(angle_lists)
+%     ML_features.angle_names{kk} = (angle_lists{kk});
+%     fprintf('computing spectrograms for markers %f \n',kk)
+% 
+%     % Pre-allocate as single precision
+%     agg_features_here = single([]);
+%     dyadic_spectrograms = single([]);
+%     dyadic_spectrograms_wl = single([]);
+% 
+%     for ll = 1:numel(angle_lists{kk})
+%         spectrogram_thresh = single(5);
+% 
+%         % Convert joint angles to single precision before processing
+%         joint_angle_data = single(ML_features.joint_angles.(angle_lists{kk}{ll}));
+% 
+%         [dyadic_spectrograms_temp, fr_temp, tout] = get_dyadic_spectrogram(joint_angle_data', opts);
+% 
+%         % Force single precision and apply threshold
+%         dyadic_spectrograms_temp = single(dyadic_spectrograms_temp) + spectrogram_thresh;
+%         dyadic_spectrograms_temp(dyadic_spectrograms_temp <= 0) = single(0);
+% 
+%         good_freq = find(fr_temp < 30);
+%         weighting_function = single((5 + 20 * (fr_temp(good_freq)) ./ 30) ./ 5);
+% 
+%         % Apply weighting and concatenate - force single precision
+%         weighted_spectrograms = single(bsxfun(@times, dyadic_spectrograms_temp(good_freq, :), weighting_function));
+%         dyadic_spectrograms = single(cat(1, dyadic_spectrograms, weighted_spectrograms));
+% 
+%         % Clear large temporary variables immediately
+%         clear dyadic_spectrograms_temp weighted_spectrograms
+% 
+%         %% compute the wavelets coefficients
+%         % Downsample and convert to single
+%         downsampled_data = single(joint_angle_data(1:3:end));
+%         [~, w_map, fr_wavelet] = return_wavelets(downsampled_data, ...
+%             1:numel(downsampled_data), opts);
+% 
+%         % Force single precision
+%         w_map = single(w_map) + single(3);
+%         w_map(w_map < 0) = single(0);
+% 
+%         dyadic_spectrograms_wl = single(cat(2, dyadic_spectrograms_wl, w_map));
+% 
+%         % Clear temporary variables
+%         clear joint_angle_data downsampled_data w_map
+%     end
+% 
+%     %% if need new coefficients -- these are constant across files
+%     if (~exist(jadyn_coeff_file, 'file') || overwrite_coeff)
+%         % Force single precision for PCA input
+%         spectro_input = single(squeeze(dyadic_spectrograms)');
+%         spectro_wl_input = single(squeeze(dyadic_spectrograms_wl));
+% 
+%         [COEFFS_feat{kk}, dyadic_spectrograms_score, ~, ~, explained{kk}] = pca(spectro_input);
+%         [COEFFS_feat_wl{kk}, dyadic_spectrograms_score_wl, ~, ~, explained_wl{kk}] = pca(spectro_wl_input);
+% 
+%         % Convert results to single precision
+%         COEFFS_feat{kk} = single(COEFFS_feat{kk});
+%         dyadic_spectrograms_score = single(dyadic_spectrograms_score);
+%         explained{kk} = single(explained{kk});
+% 
+%         COEFFS_feat_wl{kk} = single(COEFFS_feat_wl{kk});
+%         dyadic_spectrograms_score_wl = single(dyadic_spectrograms_score_wl);
+%         explained_wl{kk} = single(explained_wl{kk});
+% 
+%         % Clear large input matrices
+%         clear spectro_input spectro_wl_input
+%     else
+%         % Use existing coefficients - force single precision
+%         spectro_mean = single(mean(squeeze(dyadic_spectrograms), 2));
+%         spectro_centered = single(bsxfun(@minus, squeeze(dyadic_spectrograms), spectro_mean));
+%         dyadic_spectrograms_score = single(spectro_centered' * squeeze(COEFFS_feat{kk}));
+% 
+%         spectro_wl_mean = single(mean(squeeze(dyadic_spectrograms_wl), 2));  
+%         spectro_wl_centered = single(bsxfun(@minus, squeeze(dyadic_spectrograms_wl), spectro_wl_mean));
+%         dyadic_spectrograms_score_wl = single(spectro_wl_centered * squeeze(COEFFS_feat_wl{kk}));
+% 
+%         % Clear intermediate variables
+%         clear spectro_mean spectro_centered spectro_wl_mean spectro_wl_centered
+%     end
+% 
+%     % Clear large accumulated matrices now that PCA is done
+%     clear dyadic_spectrograms dyadic_spectrograms_wl
+% 
+%     %% Replicate and resize results - single precision throughout
+%     reference_length = size(ML_features.joint_angles.(angle_lists{kk}{ll}), 1);
+% 
+%     % Regular spectrogram replication
+%     replication_factor = floor(reference_length ./ size(dyadic_spectrograms_score, 1));
+%     dynamics_pcs = single(repelem(dyadic_spectrograms_score(:, 1:num_spectrogram_pcs), replication_factor, 1));
+% 
+%     % Pad if necessary
+%     size_diff = reference_length - size(dynamics_pcs, 1);
+%     if size_diff > 0
+%         padding = single(zeros(size_diff, size(dynamics_pcs, 2)));
+%         dynamics_pcs = single(cat(1, dynamics_pcs, padding));
+%         clear padding
+%     end
+% 
+%     % Wavelet replication  
+%     replication_factor_wl = ceil(reference_length ./ size(dyadic_spectrograms_score_wl, 1));
+%     dynamics_pcs_wl = single(repelem(dyadic_spectrograms_score_wl(:, 1:num_spectrogram_pcs), replication_factor_wl, 1));
+% 
+%     % Adjust size to match exactly
+%     current_size_wl = size(dynamics_pcs_wl, 1);
+%     if current_size_wl < reference_length
+%         size_diff_wl = reference_length - current_size_wl;
+%         padding_wl = single(zeros(size_diff_wl, size(dynamics_pcs_wl, 2)));
+%         dynamics_pcs_wl = single(cat(1, dynamics_pcs_wl, padding_wl));
+%         clear padding_wl
+%     elseif current_size_wl > reference_length
+%         excess = current_size_wl - reference_length;
+%         dynamics_pcs_wl(end-excess+1:end, :) = [];
+%     end
+% 
+%     % Clear PCA scores after replication
+%     clear dyadic_spectrograms_score dyadic_spectrograms_score_wl
+% 
+%     %% Store results - ensure single precision
+%     num_spectrogram_pcs = 25;
+%     ML_features.ja_freq = single(fr_temp(good_freq));
+%     ML_features.(strcat('spectrogram_pcs_', angle_list_name{kk}, '_explained')) = single(explained{kk});
+%     ML_features.(strcat('spectrogram_pcs_wl_', angle_list_name{kk}, '_explained_wl')) = single(explained_wl{kk});
+% 
+%     ML_features.(strcat('spectrogram_pcs_', angle_list_name{kk})) = single(dynamics_pcs);
+%     ML_features.(strcat('spectrogram_pcs_wl_', angle_list_name{kk})) = single(dynamics_pcs_wl);
+%     ML_features.fr_wavelet = single(fr_wavelet);
+%     ML_features.(strcat('wavelet_coeffs_', angle_list_name{kk})) = single(COEFFS_feat_wl{kk}(:, 1:num_spectrogram_pcs));
+%     ML_features.(strcat('spectrogram_coeffs_', angle_list_name{kk})) = single(COEFFS_feat{kk}(:, 1:num_spectrogram_pcs));
+%     ML_features.ja_dyn_explained = single(explained{kk});
+% 
+%     % Clear final working variables
+%     clear dynamics_pcs dynamics_pcs_wl fr_temp tout good_freq weighting_function
+%     clear reference_length replication_factor replication_factor_wl
+% 
+%     % Force garbage collection periodically
+%     if mod(kk, 3) == 0  % Every 3 iterations
+%         fprintf('Forcing garbage collection after group %d\n', kk);
+%         java.lang.System.gc();  % Force Java garbage collection
+%         pause(0.1);  % Brief pause to allow cleanup
+%     end
+% end
+
+% Final cleanup
+clear agg_features_here spectrogram_thresh
+
     if (~exist( jadyn_coeff_file,'file') || overwrite_coeff)
         save( jadyn_coeff_file,'COEFFS_feat','explained','COEFFS_feat_wl','explained_wl')
     end
@@ -1226,7 +1409,7 @@ if numel(framelist_true)>10 %need at least 1 s of data
 
     %% save after JA features
     % if (~overwrite_coeff)
-        save(savefilename,'-struct','ML_features','-append','-v7.3');
+        save(savefilename,'-struct','ML_features','-append');
     % end
     ML_features = rmfield(ML_features,fieldnames(ML_features));
 

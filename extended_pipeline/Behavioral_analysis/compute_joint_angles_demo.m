@@ -1,5 +1,9 @@
-function ML_features = compute_joint_angles_demo(mocapstruct,linkname)
-ML_features = struct();
+function compute_joint_angles_demo(mocapstruct,linkname,MLmatobjfile)
+% Memory optimization: Create matfile-based ML_features from the start
+fprintf('Creating memory-optimized ML_features using matfile approach...\n');
+
+% Create temporary matfile for ML_features
+temp_ml_file = fullfile(MLmatobjfile);
 
 %% get joint angle features
 fprintf('%% computing joint angles %% \n');
@@ -44,8 +48,11 @@ all_seglengths = cell(1,numel(segment_pairs));
 all_segments = cell(1,numel(segment_pairs));
 transverse_seglengths = cell(1,numel(segment_pairs));
 
-ML_features.segment_pairs = segment_pairs;
-ML_features.include_angles = include_angles;
+% Pre-allocate structures - SINGLE PRECISION
+jointangle_struct = struct();
+all_seglengths = cell(1,numel(segment_pairs));
+all_segments = cell(1,numel(segment_pairs));
+transverse_seglengths = cell(1,numel(segment_pairs));
 
 %% SAGGITAL ANGLES - SINGLE PRECISION
 for ll = 1:numel(saggital_pairs)
@@ -163,13 +170,22 @@ for lk = 1:numel(fname)
 end
 
 %% COMPUTE MEANS AND STORE RESULTS - SINGLE PRECISION
-ML_features.joint_angles_mean = single(real(structfun(@nanmean, jointangle_struct)));
-ML_features.jointangle_struct = jointangle_struct;
-ML_features.all_seglengths = all_seglengths;
-ML_features.all_segments = all_segments;
-ML_features.transverse_seglengths = transverse_seglengths;
+joint_angles_mean = single(real(structfun(@nanmean, jointangle_struct)));
+
+% Save to matfile with separate top-level fields for selective access
+fprintf('Saving data to matfile for memory optimization...\n');
+save(temp_ml_file, 'jointangle_struct', 'all_seglengths', 'all_segments', ...
+     'transverse_seglengths', 'joint_angles_mean', 'segment_pairs', 'include_angles', '-v7.3');
+
+% Create matfile object and return the file path as ML_features
+% ML_features = struct();
+% ML_features.matfile_path = temp_ml_file;
+% ML_features.is_matfile_based = true;
+
+fprintf('ML_features created as matfile-based structure. Individual fields can be accessed on-demand.\n');
 
 % Final cleanup
 clear anglestruct segment_pairs coronal_pairs saggital_pairs transverse_pairs planar_trios
+clear jointangle_struct all_seglengths all_segments transverse_seglengths ML_features_temp
 
 end

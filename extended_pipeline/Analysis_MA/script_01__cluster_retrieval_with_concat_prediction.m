@@ -11,8 +11,9 @@
 close all
 clc
 clear
-GC = general_configs();
+global GC
 
+GC = general_configs();
 %% INIT
 % Get prediction concatenation settings
 settings = get_settings_concat_preds();
@@ -194,7 +195,7 @@ input_params = struct();
 input_params.SpineF_marker = 'SpineF';
 input_params.SpineM_marker = 'SpineM';
 % input_params.repfactor = 300/30;
-i1nput_params.repfactor = GC.repfactor; % round(300/init_frame_rate);
+input_params.repfactor = GC.repfactor; % round(300/init_frame_rate);
 input_params.conversion_factor = 1;
 
 % Run prepro if it doesn't exist
@@ -242,12 +243,16 @@ mocapstruct.modular_cluster_properties.clipped_index{8} = 1:size(mocapstruct.ali
 
 if ~exist(MLmatobjfile,'file') || overwrite_MLmatobjfile
 
-    MLmatobj = create_behavioral_features(mocapstruct,coefficient_file,overwrite_coefficient,linkname);
-    save(MLmatobjfile, 'MLmatobj', '-v7.3')
+    MLmatobj = create_behavioral_features(mocapstruct,coefficient_file,overwrite_coefficient,linkname, MLmatobjfile);
+    % save(MLmatobjfile, 'MLmatobj', '-v7.3')
+    %MLmatobj_ =load(MLmatobjfile);
+    %ML_features = MLmatobj_.ML_features;
 else
     disp('Loading ML features')
-    MLmatobj = load(MLmatobjfile, 'MLmatobj');
-    MLmatobj = MLmatobj.MLmatobj;
+    MLmatobj = load(MLmatobjfile);
+
+    %MLmatobj = load(MLmatobjfile, 'MLmatobj');
+    %MLmatobj = MLmatobj.MLmatobj;
 end
 
 %%
@@ -301,14 +306,16 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
 
     mocapstruct.move_frames = 1:size(mocapstruct.aligned_mean_position,1);
     jt_features_extra = load_extra_tsne_features(mocapstruct,MLmatobj_extra,analysisstruct);
-    %
+
+    % Save jt extras
+    analysisstruct.extra_jt_features = jt_features_extra;
 
     % 2. Do TSNE
     disp('%% Running TSNE %%')
     rng default % For reproducibility
-    D = cat(2,analysisstruct.jt_features,jt_features_extra);
+    D = cat(2,analysisstruct.jt_features,jt_features_extra(:, end-11:end));
     X_clean = fillmissing(D, 'linear');
-    zvals = tsne(X_clean, "Perplexity",perplexity, 'Exaggeration', 20,'verbose',1, 'LearnRate',1200);
+    zvals = tsne(X_clean, "Perplexity",perplexity, 'Exaggeration',15 ,'verbose',1);
 
     %zvals = tsne(cat(2,analysisstruct.jt_features,jt_features_extra), "Perplexity",perplexity, 'Exaggeration', 5,'verbose',1, 'LearnRate',1000);
 
@@ -321,15 +328,16 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
     save(zvals_filename, 'zvals','-mat')
 
     % Plot TSNE per animal
-    figure(1)
-    gscatter(zvals(:,1), zvals(:,2), cond_inds(1:end-1))
+    fig_zvals = figure(1);
+    gscatter(zvals(:,1), zvals(:,2), cond_inds)
     % plot(zvals(:,1),zvals(:,2),'ob','MarkerFaceColor','b', 'MarkerSize',2)
     title({['Granu: ',num2str(analysisparams.tsnegranularity)], ['Perp: ', num2str(perplexity)]})
     set(gcf,'Position',([100 100 1100 1100]))
     set(gcf, 'color', 'w')
-    analysisstruct.extra_jt_features = jt_features_extra;
     print('Saving analysis struct ...')
+    cluster_figure_filename = fullfile(rootpath,'Tsne_grouped_zvals.pdf');
     save(analysis_filename, 'analysisstruct' , '-v7.3')
+    exportgraphics(fig_zvals, cluster_figure_filename)
 
 else
     disp(' Loading TSNE zvals')
@@ -441,9 +449,9 @@ condition =1;
 
 
 %% save analysis
-print('saving analysis struct ...')
+disp('saving analysis struct ...')
 save(analysis_filename, 'analysisstruct' , '-v7.3')
-print('CAPTURE processing done!!')
+disp('CAPTURE processing done!!')
 
 
 %% This is the end of the analysis script

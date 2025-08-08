@@ -15,41 +15,41 @@ function [wavelet_coeffs,wtAll,fr]= WaveletCluster(features, frames, opts ,wtpre
 %% initialize options
 if nargin<3 || isempty(opts);
     frames = [];
-    
+
     opts.whiten = 0;
     opts.frameNormalize = 0;
     opts.clustermethod = 'GMM';
     num = size(features,1); % number modes (spectrograms to find) (usually want full dimension)
     % num = pcuse;
     ds = 1; % down sampling
-	samprate = int(0.81 * GC.upsampling_to); %245 
+	samprate = int(0.81 * GC.upsampling_to); %245
     params = struct;
     params.samplingFreq = samprate/ds;
     params.numPeriods=50; %distinct number of frequencies to use
     params.minF = 0.2; % min freq to analyze
     params.maxF = 30; % max freq to analyze
-    
-    
+
+
     % for simulated data;
     params.samplingFreq = 500;
-    
-    
+
+
     % for gmm model parameters
     pcuse = 20;
     numclusters = 40;
     lambda = 0.1; % regularization
-   
-    
+
+
 else
     num=opts.num;
     ds = opts.ds;
     samprate = opts.samprate;
     params = opts.params;
-    
+
     pcuse = opts.pcuse;
     lambda = opts.lambda;
 end
- 
+
     subsample = 10; % number of times to run GMM fit on subsample
     numsample = 500; % number of data points to sample
 
@@ -82,7 +82,7 @@ wt = log(wt);
 %wt = wt(:,fr > 4);
 %fr = fr(fr > 4);
 
-%figure; 
+%figure;
 %ax1=subplot(3,1,[1 2]);imagesc(wt'); %set(ax1,'visible','off');
 %title(['omega = ' num2str(params.omega0)]);
 %ax2 = subplot(3,1,3); plot(features); set(ax2,'xlim',[0 length(features)]);
@@ -131,7 +131,7 @@ end
 disp('finding PCs');
     wtAll(find(isinf(wtAll))) = 0;
      wtAll(find(isnan(wtAll))) = 0;
-   
+if false
 if exist('pca_randomized')
 [U,S,V] = pca_randomized(wtAll, min(pcuse,size(wtAll,1)));
 coeff = zeros(size(wtAll,2),size(wtAll,2));
@@ -149,7 +149,10 @@ end
 
 feat_pcs = V;
 wavelet_coeffs = U;
-% 
+else
+wavelet_coeffs = [];
+end
+%
 % figure(667)
 % plot3(wavelet_coeffs(1:50:500000,4),wavelet_coeffs(1:50:500000,2),wavelet_coeffs(1:50:500000,3),'+')
 % % weight pca modes to prevent noise from overwhelming GMM
@@ -158,7 +161,7 @@ wavelet_coeffs = U;
 % plots wavelet feature space sorted into clusters
 % [sorted_labels,ind] = sort(labels,'ascend');
 % figure;imagesc(wtAll(labels,:));
-% 
+%
 % label_ind = find(diff(sorted_labels)>0);
 % hold on;
 % for j = 1:length(label_ind);

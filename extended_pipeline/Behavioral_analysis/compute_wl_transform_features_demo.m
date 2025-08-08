@@ -26,26 +26,6 @@ else
     coeffstruct = struct();
 end
 
-% Create matfile object for efficient memory access
-ml_matfile = matfile(temp_ml_file, 'Writable', true);
-
-% Load only the minimal required fields into memory
-appendage_anglegps = ml_matfile.ML_features.appendage_anglegps;
-fprintf('ML_features saved to temp file. Working with matfile object to minimize memory usage.\n');
-
-% Clear the large ML_features structure from memory
-clear ML_features;
-
-if exist(coeffstruct_in,'file')
-    try
-        coeffstruct = load(coeffstruct_in);
-    catch ME
-        coeffstruct = load(coeffstruct_in);
-    end
-else
-    coeffstruct = struct();
-end
-
 %% spectrogram parameters
 opts.fps = GC.upsampling_to;%300./1;
 
@@ -284,11 +264,11 @@ end
 fprintf('Loading final ML_features from matfile and cleaning up...\n');
 ML_features = ml_matfile.ML_features;
 
-% Clean up temporary file
-clear ml_matfile;
-if exist(temp_ml_file, 'file')
-    delete(temp_ml_file);
-    fprintf('Temporary matfile deleted.\n');
-end
+% % Clean up temporary file
+% clear ml_matfile;
+% if exist(temp_ml_file, 'file')
+%     delete(temp_ml_file);
+%     fprintf('Temporary matfile deleted.\n');
+% end
 
 end
