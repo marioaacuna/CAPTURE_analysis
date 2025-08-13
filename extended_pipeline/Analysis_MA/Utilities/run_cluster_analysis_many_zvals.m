@@ -1,8 +1,10 @@
 %% Run clustering and plotting for multiple zValues fields per experiment
 % Loops through configured experiments and selected zValues variants in
 % analysisstruct, performs clustering, plots, and saves outputs and structs.
+% Data comes from compute_zvals_diff_features.m 
 
 clear; clc;
+global GC
 GC = general_configs();
 
 % Experiments and folders (same as in plot_tsnemaps_per_condition_drugs_many_zvals)

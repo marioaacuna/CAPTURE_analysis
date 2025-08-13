@@ -6,7 +6,7 @@ function analysisstruct_out = cluster_analysis_for_zval(analysisstruct_in, zval_
 %   - Renames the selected zValues field to 'zValues'
 %   - Sets/refreshes clustering parameters from GC
 %   - Runs compute_analysis_clusters_demo and returns the updated struct
-
+global GC
 % Safety checks
 if nargin < 3 || isempty(GC)
     GC = general_configs(); %#ok<NASGU>
@@ -23,6 +23,8 @@ end
 
 % Create a temp copy and prune zValues* fields except the one we want
 analysisstruct_temp = analysisstruct_in; %#ok<NASGU>
+clear analysisstruct_in; % clear original to save memory
+
 fns = fieldnames(analysisstruct_temp);
 z_like = startsWith(fns, 'zValues');
 fns_to_remove = fns(z_like & ~strcmp(fns, zval_field));
@@ -39,15 +41,28 @@ else
     analysisstruct_temp.zValues = analysisstruct_temp.zValues;
 end
 
-% Ensure clustering parameters exist (refresh from GC where applicable)
-try
-    analysisstruct_temp.params.density_res       = GC.density_res;      
-    analysisstruct_temp.params.density_width     = GC.density_width;    
-    analysisstruct_temp.params.expansion_factor  = GC.expansion_factor; 
-    analysisstruct_temp.params.density_threshold = GC.density_threshold;
-catch
-    % If GC missing any field, ignore and keep existing
+% This might not be necessary, since we copied analysisstruct with all its params
+% check if all params exist in analysisstruct_temp
+if ~isfield(analysisstruct_temp.params, 'density_res')
+    analysisstruct_temp.params.density_res = GC.density_res;
 end
+if ~isfield(analysisstruct_temp.params, 'density_width')
+    analysisstruct_temp.params.density_width = GC.density_width;
+end
+if ~isfield(analysisstruct_temp.params, 'expansion_factor')
+    analysisstruct_temp.params.expansion_factor = GC.expansion_factor;
+end
+
+% try
+%     analysisstruct_temp.params.density_res       = GC.density_res;      
+%     analysisstruct_temp.params.density_width     = GC.density_width;    
+%     analysisstruct_temp.params.expansion_factor  = GC.expansion_factor; 
+%     analysisstruct_temp.params.density_threshold = GC.density_threshold;
+% catch
+%     % If GC missing any field, ignore and keep existing
+%     error('Some clustering parameters not set in GC, using defaults.');
+
+% end
 
 % Matched conditions setup if missing
 if isfield(analysisstruct_temp, 'condition_inds') && ~isempty(analysisstruct_temp.condition_inds)
@@ -55,9 +70,9 @@ if isfield(analysisstruct_temp, 'condition_inds') && ~isempty(analysisstruct_tem
     analysisstruct_temp.matchedconds     = {uniq};
     analysisstruct_temp.conditions_to_run = uniq;
 else
-    % Fallback to single condition
-    analysisstruct_temp.matchedconds      = {1};
-    analysisstruct_temp.conditions_to_run = 1;
+    % % Fallback to single condition
+    % analysisstruct_temp.matchedconds      = {1};
+    % analysisstruct_temp.conditions_to_run = 1;
 end
 
 % Run clustering
