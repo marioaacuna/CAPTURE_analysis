@@ -45,7 +45,7 @@ for exp_idx = 1:numel(experiments)
         warning('analysisstruct var not found in %s', fn_analysis);
         continue;
     end
-    analysisstruct = S.analysisstruct; %#ok<NASGU>
+    %analysisstruct = S.analysisstruct; %#ok<NASGU>
 
     % Export and save folders per experiment
     exp_out_folder = fullfile(GC.temp_root, 'clusters_many_zvals', exp.name);
@@ -53,6 +53,8 @@ for exp_idx = 1:numel(experiments)
 
     for zi = 1:numel(zvals_fields)
         zf = zvals_fields{zi};
+        analysisstruct = S.analysisstruct; 
+
         if ~isfield(analysisstruct, zf)
             fprintf('Skipping %s (field not found)\n', zf);
             continue;
@@ -75,8 +77,8 @@ for exp_idx = 1:numel(experiments)
         analysis_filename = fullfile(data_folder, sprintf('analysis_%s.mat', zf));
         try
             disp('saving analysis struct ...');
-            analysisstruct_out = analysisstruct_temp; %#ok<NASGU>
-            analysisstruct = analysisstruct_temp; %#ok<NASGU> % back to analysisstruct
+            analysisstruct_out = analysisstruct_temp; 
+            analysisstruct = analysisstruct_temp; % % back to analysisstruct
             save(analysis_filename, 'analysisstruct', '-v7.3');
         catch ME
             warning('Failed saving analysisstruct for %s: %s', zf, ME.message);

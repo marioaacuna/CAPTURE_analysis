@@ -1,4 +1,4 @@
-function plot_and_export_clusters(analysisstruct_temp, rootpath, ratname, plot_poses)
+function plot_and_export_clusters(analysisstruct_temp, rootpath, ratname, plot_poses, visible)
 %PLOT_AND_EXPORT_CLUSTERS Plot t-SNE clusters and cluster poses; export to files.
 %   plot_and_export_clusters(analysisstruct_temp, rootpath, ratname, plot_poses)
 %
@@ -11,6 +11,7 @@ arguments
     rootpath (1,:) char
     ratname (1,:) char = 'rat'
     plot_poses (1,1) logical = true
+    visible = false;
 end
 
 % behavior plots and movies meta
@@ -32,7 +33,7 @@ catch
 end
 
 % Plot a tsne map
-h1 = figure(609); clf;
+h1 = figure('Visible', visible); clf;
 params = struct();
 params.nameplot = 1;
 params.density_plot = 0;
@@ -62,7 +63,7 @@ catch
 end
 
 if plot_poses && ~isempty(cls)
-    fig_poses = figure('pos', [10,10,1500,1200]);
+    fig_poses = figure('pos', [10,10,1500,1200], 'Visible', visible);
     nclus = numel(cls);
     n_rows = ceil(sqrt(nclus));
     n_cols = ceil(sqrt(nclus));
