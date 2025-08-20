@@ -313,7 +313,8 @@ if ~exist(zvals_filename, 'file') || overwrite_zvals
     % 2. Do TSNE
     disp('%% Running TSNE %%')
     rng default % For reproducibility
-    D = cat(2,analysisstruct.jt_features,jt_features_extra(:, end-11:end));
+    % D = cat(2,analysisstruct.jt_features,jt_features_extra(:, end-11:end)); % runs only jt_features & hand labeled extra features
+    D = cat(2,analysisstruct.jt_features,jt_features_extra); % runs  jt_features & full extra features
     X_clean = fillmissing(D, 'linear');
     zvals = tsne(X_clean, "Perplexity",perplexity, 'Exaggeration',15 ,'verbose',1);
 
