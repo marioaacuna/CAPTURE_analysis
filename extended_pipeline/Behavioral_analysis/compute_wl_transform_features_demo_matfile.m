@@ -101,7 +101,7 @@ for kk = 8
         if (~isfield(coeffstruct,coeffname_appendage) || overwrite_coeff)
             fprintf('OVERWRITING APPENDAGES WL \n')
                         % Memory-optimized PCA on wavelet features
-            [COEFFS_feat_wl_appendages_kk, ~, ~, ~, explained_wl_appendages_kk] = pca(agg_features_wl(1:3:end,:), 'Economy', true);
+            [COEFFS_feat_wl_appendages_kk, ~, ~, ~, explained_wl_appendages_kk] = pca(agg_features_wl(1:1:end,:), 'Economy', true);
             COEFFS_feat_wl_appendages_kk = single(COEFFS_feat_wl_appendages_kk);
             explained_wl_appendages_kk = single(explained_wl_appendages_kk);
             coeffstruct.(coeffname_appendage) = COEFFS_feat_wl_appendages_kk;
@@ -177,7 +177,7 @@ for kk = 8
 
         if (~isfield(coeffstruct,coeffname_appendage) || overwrite_coeff)
             fprintf('OVERWRITING APPENDAGES WL EUC \n')
-            [COEFFS_feat_wl_appendages_euc_kk, ~, ~, ~, explained_wl_appendages_euc_kk] = pca(agg_features_wl_euc(1:3:end,:), 'Economy', true);
+            [COEFFS_feat_wl_appendages_euc_kk, ~, ~, ~, explained_wl_appendages_euc_kk] = pca(agg_features_wl_euc(1:1:end,:), 'Economy', true);
             COEFFS_feat_wl_appendages_euc_kk = single(COEFFS_feat_wl_appendages_euc_kk);
             explained_wl_appendages_euc_kk = single(explained_wl_appendages_euc_kk);
             coeffstruct.(coeffname_appendage) = COEFFS_feat_wl_appendages_euc_kk;

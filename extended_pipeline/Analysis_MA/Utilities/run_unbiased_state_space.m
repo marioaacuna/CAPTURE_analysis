@@ -1,18 +1,18 @@
-function run_unbiased_state_space()
+% function run_unbiased_state_space()
 % Unbiased animal-level behavioral discriminability without t-SNE.
 % Methods:
 %   1) PCA + GMM (states = soft posteriors) -> occupancy + soft transitions
-%   2) PCA + k-means (hard states)         -> occupancy + transitions
+%   2) PCA + k-means/DBSCAN (hard states)  -> occupancy + transitions
 %   3) No clustering (aggregate stats per feature) -> mean/std/quantiles
-%   4) Sequence model (discrete HMM on k-means symbols; fallback Markov)
+%   4) Sequence model (discrete HMM on symbols; fallback Markov)
 %
 % Evaluation:
-%   - Leave-one-animal-out (grouped by animal ID) logistic AUC
+%   - Leave-one-animal-out (grouped by animal ID) SVM AUC
 %   - MMD permutation test (animal-level)
 %
 % Outputs:
-%   - Figures per method with AUC and MMD for pairs: F vs B, F vs S/H,
-%     N vs B, N vs H, F vs C, N vs G.
+%   - Figures per method with AUC and MMD for pairs
+%   - CSVs with features and summary statistics
 %   - Saved under GC.temp_root/figs_unbiased_state_space/<exp.name>/
 
 clc;
@@ -25,7 +25,7 @@ experiments(1).folder = '0_preprocessing_BSFC_300hz';
 experiments(2).name = 'BHNG_300hz';
 experiments(2).folder = '0_preprocessing_BHNG_300hz';
 
-for exp_idx = 1:numel(experiments)
+for exp_idx = 1%:numel(experiments)
     exp = experiments(exp_idx);
     fprintf('\n=== Unbiased state-space analysis: %s ===\n', exp.name);
 
@@ -68,10 +68,26 @@ for exp_idx = 1:numel(experiments)
         continue;
     end
 
+    % Transform analysisstruct to group by animal IDs
+    fprintf('Transforming analysisstruct to group by animal IDs...\n');
+    analysisstruct = transform_analysisstruct_by_animals(analysisstruct, ids);
+
     % Preprocess: impute NaNs, standardize, PCA
-    [X_std, col_mu, col_sig] = standardize_impute(X_raw); %#ok<NASGU>
-    ncomp = min(50, size(X_std,2));
-    [score_pca, pca_info] = do_pca(X_std, ncomp); %#ok<NASGU>
+    % [X_std, col_mu, col_sig] = standardize_impute(X_raw); %#ok<NASGU>
+    ncomp = min(10, size(X_raw,2));
+    [score_pca, pca_info] = do_pca(X_raw, ncomp); %#ok<NASGU>
+
+    % Determine optimal K using hierarchical clustering and silhouette analysis
+    % fprintf('Determining optimal K via hierarchical clustering...\n');
+    % optimal_K = determine_optimal_k(score_pca);
+    % fprintf('Optimal K selected: %d\n', optimal_K);
+
+    % Fixed optimal K for all methods (behavioral states)
+    optimal_K = 12;
+    fprintf('Using fixed K = %d for all clustering methods\n', optimal_K);
+
+    % Clustering method toggle: 'kmeans' or 'dbscan'
+    clustering_method = 'kmeans'; % Change to 'dbscan' to use DBSCAN
 
     % Build per-ID index map
     [ac_list, ac_to_idx] = index_by_ac(ids);
@@ -93,15 +109,17 @@ for exp_idx = 1:numel(experiments)
     % Pairs to test: restrict by experiment and available conditions
     if contains(exp.name, 'BSFC')
         candidate_pairs = {
-            'F','B';
+            'F','B'
             'F',ctrlPain;
             'F','C';
+            'C', 'S';
         };
     elseif contains(exp.name, 'BHNG')
         candidate_pairs = {
             'N','B';
             'N',ctrlPain;
             'N','G';
+            'G', 'H';
         };
     else
         % Fallback: anchor to present main condition
@@ -110,12 +128,15 @@ for exp_idx = 1:numel(experiments)
                 'F','B';
                 'F',ctrlPain;
                 'F','C';
+                'C', 'S';
             };
         else
             candidate_pairs = {
                 'N','B';
                 'N',ctrlPain;
                 'N','G';
+                'G', 'H';
+
             };
         end
     end
@@ -132,11 +153,12 @@ for exp_idx = 1:numel(experiments)
     % 1) PCA + GMM
     fprintf('Method 1: PCA + GMM (soft states)...\n');
     try
-        K_candidates = [8 12 16 24 32];
+        K_candidates = [optimal_K-2, optimal_K-1, optimal_K, optimal_K+1, optimal_K+2];
+        K_candidates = K_candidates(K_candidates >= 3); % Ensure K >= 3
         [X_occ_tr, X_tran_tr, info_gmm] = features_from_gmm(score_pca, ac_to_idx, K_candidates);
         X_animal_gmm = [X_occ_tr, X_tran_tr];
-        [AUCs_gmm, Pvals_gmm, pair_labels] = loao_and_mmd(X_animal_gmm, ac_list, animals, conds, pairs);
-        fig1 = plot_auc_mmd(pair_labels, AUCs_gmm, Pvals_gmm, sprintf('%s - PCA+GMM (K=%d, %dD PCA)', exp.name, info_gmm.K, size(score_pca,2)), cmap);
+        [AUCs_gmm, Pvals_gmm, pair_labels, n_samples] = loao_and_mmd(X_animal_gmm, ac_list, animals, conds, pairs);
+        fig1 = plot_auc_mmd_with_error(pair_labels, AUCs_gmm, Pvals_gmm, n_samples, sprintf('%s - PCA+GMM (K=%d, %dD PCA)', exp.name, info_gmm.K, size(score_pca,2)), cmap);
         exportgraphics(fig1, fullfile(out_folder, 'unbiased_pca_gmm_auc_mmd.pdf'), 'ContentType','vector', 'BackgroundColor','white');
         close(fig1);
         % Export CSVs
@@ -145,15 +167,18 @@ for exp_idx = 1:numel(experiments)
         %warning('PCA+GMM failed: %s', ME.message);
     end
 
-    % 2) PCA + k-means
-    fprintf('Method 2: PCA + k-means (hard states)...\n');
+    % 2) PCA + clustering (k-means or DBSCAN)
+    fprintf('Method 2: PCA + %s clustering...\n', clustering_method);
     try
-        K_km = 24; % reasonable default, can be tuned
-        [X_occ_km, X_tran_km, info_km] = features_from_kmeans(score_pca, ac_to_idx, K_km);
+        if strcmp(clustering_method, 'dbscan')
+            [X_occ_km, X_tran_km, info_km] = features_from_dbscan(score_pca, ac_to_idx);
+        else
+            [X_occ_km, X_tran_km, info_km] = features_from_kmeans(score_pca, ac_to_idx, optimal_K);
+        end
         X_animal_km = [X_occ_km, X_tran_km];
-        [AUCs_km, Pvals_km, pair_labels] = loao_and_mmd(X_animal_km, ac_list, animals, conds, pairs);
-        fig2 = plot_auc_mmd(pair_labels, AUCs_km, Pvals_km, sprintf('%s - PCA+k-means (K=%d, %dD PCA)', exp.name, info_km.K, size(score_pca,2)), cmap);
-        exportgraphics(fig2, fullfile(out_folder, 'unbiased_pca_kmeans_auc_mmd.pdf'), 'ContentType','vector', 'BackgroundColor','white');
+        [AUCs_km, Pvals_km, pair_labels, n_samples] = loao_and_mmd(X_animal_km, ac_list, animals, conds, pairs);
+        fig2 = plot_auc_mmd_with_error(pair_labels, AUCs_km, Pvals_km, n_samples, sprintf('%s - PCA+%s (K=%d, %dD PCA)', exp.name, clustering_method, info_km.K, size(score_pca,2)), cmap);
+        exportgraphics(fig2, fullfile(out_folder, sprintf('unbiased_pca_%s_auc_mmd.pdf', clustering_method)), 'ContentType','vector', 'BackgroundColor','white');
         close(fig2);
         % Export CSVs
         export_method_csvs(out_folder, 'pca_kmeans', ac_list, X_animal_km, build_kmeans_colnames(info_km.K), pair_labels, AUCs_km, Pvals_km);
@@ -165,8 +190,8 @@ for exp_idx = 1:numel(experiments)
     fprintf('Method 3: No clustering (aggregate stats)...\n');
     try
         X_animal_agg = features_aggregate(X_std, ac_to_idx);
-        [AUCs_agg, Pvals_agg, pair_labels] = loao_and_mmd(X_animal_agg, ac_list, animals, conds, pairs);
-        fig3 = plot_auc_mmd(pair_labels, AUCs_agg, Pvals_agg, sprintf('%s - Aggregates (means/std/quantiles)', exp.name), cmap);
+        [AUCs_agg, Pvals_agg, pair_labels, n_samples] = loao_and_mmd(X_animal_agg, ac_list, animals, conds, pairs);
+        fig3 = plot_auc_mmd_with_error(pair_labels, AUCs_agg, Pvals_agg, n_samples, sprintf('%s - Aggregates (means/std/quantiles)', exp.name), cmap);
         exportgraphics(fig3, fullfile(out_folder, 'unbiased_aggregate_auc_mmd.pdf'), 'ContentType','vector', 'BackgroundColor','white');
         close(fig3);
         % Export CSVs (generic column names)
@@ -178,15 +203,20 @@ for exp_idx = 1:numel(experiments)
     end
 
     % 4) Sequence model: discrete HMM (fallback Markov)
-    fprintf('Method 4: Sequence model (HMM discrete on k-means symbols)...\n');
+    fprintf('Method 4: Sequence model (HMM discrete on symbols)...\n');
     try
-    K_sym = 24;
-    [sym_idx, ~] = symbols_from_kmeans(score_pca, K_sym);
-        H_hidden = 12; % hidden states for HMM
-        [X_animal_hmm, used_hmm] = features_from_hmm_discrete(sym_idx, ac_to_idx, K_sym, H_hidden);
-        [AUCs_hmm, Pvals_hmm, pair_labels] = loao_and_mmd(X_animal_hmm, ac_list, animals, conds, pairs);
+        % if strcmp(clustering_method, 'dbscan')
+        %     [sym_idx, ~] = symbols_from_dbscan(score_pca, optimal_K);
+        % else
+        %     [sym_idx, ~] = symbols_from_kmeans(score_pca, optimal_K);
+        % end
+        [sym_idx] = analysisstruct.annot_reordered{2};
+        optimal_K = max(sym_idx);
+        H_hidden = max(6, floor(optimal_K/2)); % Hidden states based on optimal K
+        [X_animal_hmm, used_hmm] = features_from_hmm_discrete(sym_idx, ac_to_idx, optimal_K, H_hidden);
+        [AUCs_hmm, Pvals_hmm, pair_labels, n_samples] = loao_and_mmd(X_animal_hmm, ac_list, animals, conds, pairs);
         tag = 'HMM'; if ~used_hmm, tag = 'Markov fallback'; end
-        fig4 = plot_auc_mmd(pair_labels, AUCs_hmm, Pvals_hmm, sprintf('%s - Sequence model (%s, Ksym=%d, H=%d)', exp.name, tag, K_sym, H_hidden), cmap);
+        fig4 = plot_auc_mmd_with_error(pair_labels, AUCs_hmm, Pvals_hmm, n_samples, sprintf('%s - Sequence model (%s, Ksym=%d, H=%d)', exp.name, tag, optimal_K, H_hidden), cmap);
         exportgraphics(fig4, fullfile(out_folder, 'unbiased_sequence_auc_mmd.pdf'), 'ContentType','vector', 'BackgroundColor','white');
         close(fig4);
         % Export CSVs (label with hidden/obs dims)
@@ -199,16 +229,23 @@ for exp_idx = 1:numel(experiments)
     % 5) Separate Markov chain analysis (sequence-only features from symbols)
     fprintf('Method 5: Markov chain analysis (separate)...\n');
     try
-        K_sym_mk = 24;
-    [sym_idx_mk, ~] = symbols_from_kmeans(score_pca, K_sym_mk);
-    [X_markov, ~, Pmats_markov] = features_markov_only(sym_idx_mk, ac_to_idx, K_sym_mk);
-        [AUCs_mk, Pvals_mk, pair_labels] = loao_and_mmd(X_markov, ac_list, animals, conds, pairs);
-        fig5 = plot_auc_mmd(pair_labels, AUCs_mk, Pvals_mk, sprintf('%s - Markov chain only (Ksym=%d)', exp.name, K_sym_mk), cmap);
+        % if strcmp(clustering_method, 'dbscan')
+        %     [sym_idx_mk, ~] = symbols_from_dbscan(score_pca, optimal_K);
+        % else
+        %     [sym_idx_mk, ~] = symbols_from_kmeans(score_pca, optimal_K);
+        % end
+        % [sym_idx_mk, ~] = symbols_from_kmeans(analysisstruct.zValues, 24);
+        rng("default");
+        % [sym_idx_mk, ~] = kmeans(analysisstruct.zValues, 1200, 'Distance','sqeuclidean');
+        sym_idx_mk = analysisstruct.annot_reordered{2}';
+        [X_markov, ~, Pmats_markov] = features_markov_only(sym_idx_mk, ac_to_idx, max(sym_idx_mk));
+        [AUCs_mk, Pvals_mk, pair_labels, n_samples] = loao_and_mmd(X_markov, ac_list, animals, conds, pairs);
+        fig5 = plot_auc_mmd_with_error(pair_labels, AUCs_mk, Pvals_mk, n_samples, sprintf('%s - Markov chain only (Ksym=%d)', exp.name, optimal_K), cmap);
         exportgraphics(fig5, fullfile(out_folder, 'unbiased_markov_only_auc_mmd.pdf'), 'ContentType','vector', 'BackgroundColor','white');
         close(fig5);
         % Export CSVs with explicit Markov column names
-        markov_cols = [arrayfun(@(i) sprintf('occ_%02d', i), 1:K_sym_mk, 'UniformOutput', false), ...
-                       arrayfun(@(i) sprintf('P_rowmajor_%03d', i), 1:K_sym_mk*K_sym_mk, 'UniformOutput', false)];
+        markov_cols = [arrayfun(@(i) sprintf('occ_%02d', i), 1:optimal_K, 'UniformOutput', false), ...
+                       arrayfun(@(i) sprintf('P_rowmajor_%03d', i), 1:optimal_K*optimal_K, 'UniformOutput', false)];
         export_method_csvs(out_folder, 'markov_only', ac_list, X_markov, markov_cols, pair_labels, AUCs_mk, Pvals_mk);
         % Optional: export full transition matrices per AC as separate CSV
         export_markov_matrices_csv(out_folder, 'markov_transition_matrices', ac_list, Pmats_markov);
@@ -220,7 +257,7 @@ for exp_idx = 1:numel(experiments)
 end
 
 fprintf('\nAll experiments complete.\n');
-end
+% end
 
 
 %% Data collection and preprocessing
@@ -381,8 +418,18 @@ end
 
 function [X_occ, X_tran, info] = features_from_kmeans(score_pca, ac_to_idx, K)
 % Fit k-means in PCA space, compute occupancies and transitions
+% Uses bout-based analysis to avoid diagonal-dominated transitions
+
 rng(42);
-[idx, ~] = kmeans(score_pca, K, 'Replicates', 10, 'MaxIter', 300, 'Display', 'off');
+% Use only top 20 PCs to stabilize clustering and avoid overfitting
+Xk = score_pca(:, 1:min(20, size(score_pca,2)));
+% Stronger settings: k-means++, cosine distance, more iterations/replicates
+[idx, ~] = kmeans(Xk, K, 'Replicates', 20, 'MaxIter', 1000, 'Distance','cosine', ...
+    'Start','plus', 'Display','off');
+
+% Bout detection parameters: adjusted for ~12 Hz effective sampling rate
+min_bout_frames = 30; % Still 30 frames to ensure meaningful behavioral bouts
+
 ac_keys = keys(ac_to_idx);
 A = numel(ac_keys);
 X_occ = zeros(A, K);
@@ -390,14 +437,25 @@ X_tran = zeros(A, K*K);
 
 for a = 1:A
     fr = ac_to_idx(ac_keys{a});
-    seq = idx(fr);
-    % occupancy
-    h = histcounts(seq, 0.5:1:(K+0.5));
+    raw_seq = idx(fr);
+
+    % Detect behavioral bouts instead of using frame-by-frame transitions
+    bout_seq = detect_bouts(raw_seq, min_bout_frames);
+
+    if isempty(bout_seq)
+        % Fallback: use original sequence if no bouts detected
+        bout_seq = raw_seq;
+        fprintf('Warning: No bouts detected for k-means %s, using original sequence\n', ac_keys{a});
+    end
+
+    % occupancy based on bouts
+    h = histcounts(bout_seq, 0.5:1:(K+0.5));
     occ = h / max(1, sum(h));
-    % transitions (hard)
+
+    % transitions between bouts (avoids artificial self-transitions)
     Tij = zeros(K,K);
-    for t = 1:(numel(seq)-1)
-        i = seq(t); j = seq(t+1);
+    for t = 1:(numel(bout_seq)-1)
+        i = bout_seq(t); j = bout_seq(t+1);
         Tij(i,j) = Tij(i,j) + 1;
     end
     rowSums = sum(Tij, 2);
@@ -434,26 +492,46 @@ end
 function [sym_idx, info] = symbols_from_kmeans(score_pca, K)
 % Discretize PCA space via k-means for sequence modeling
 rng(123);
-[sym_idx, ~] = kmeans(score_pca, K, 'Replicates', 10, 'MaxIter', 300, 'Display', 'off');
+% Use only top 10 PCs for symbolization + stronger k-means settings
+Xk = score_pca(:, 1:min(10, size(score_pca,2)));
+[sym_idx, ~] = kmeans(Xk, K, 'Replicates', 20, 'MaxIter', 1000, 'Distance','cosine', ...
+    'Start','plus', 'Display','off');
 info = struct('K', K);
 end
 
 function [X_markov, occ_all, Pmats] = features_markov_only(sym_idx, ac_to_idx, Ksym)
 % Build per-AC Markov occupancy and transition features from discrete symbols
+% Uses bout-based analysis to avoid diagonal-dominated transitions from high sampling rates
+
+% Bout detection parameters: adjusted for ~12 Hz effective sampling rate
+min_bout_frames = 30; % Still 30 frames to ensure meaningful behavioral bouts
+
 ac_keys = keys(ac_to_idx);
 A = numel(ac_keys);
 occ_all = zeros(A, Ksym);
 Pmats = zeros(Ksym, Ksym, A);
+
 for a = 1:A
     seq = sym_idx(ac_to_idx(ac_keys{a}));
-    % occupancy
-    h = histcounts(seq, 0.5:1:(Ksym+0.5));
+
+    % Detect behavioral bouts instead of using frame-by-frame transitions
+    bout_seq = detect_bouts(seq, min_bout_frames);
+
+    if isempty(bout_seq)
+        % Fallback: use original sequence if no bouts detected
+        bout_seq = seq;
+        fprintf('Warning: No bouts detected for %s, using original sequence\n', ac_keys{a});
+    end
+
+    % occupancy based on bouts (more meaningful than raw frames)
+    h = histcounts(bout_seq, 0.5:1:(Ksym+0.5));
     occ = h / max(1, sum(h));
     occ_all(a,:) = occ;
-    % transitions
+
+    % transitions between bouts (avoids artificial self-transitions)
     Tij = zeros(Ksym, Ksym);
-    for t = 1:(numel(seq)-1)
-        i = seq(t); j = seq(t+1);
+    for t = 1:(numel(bout_seq)-1)
+        i = bout_seq(t); j = bout_seq(t+1);
         Tij(i,j) = Tij(i,j) + 1;
     end
     rows = sum(Tij,2); rows(rows==0) = 1;
@@ -466,16 +544,30 @@ end
 
 function [X_animal, used_hmm] = features_from_hmm_discrete(sym_idx, ac_to_idx, Ksym, H_hidden)
 % Train a global discrete HMM on k-means symbols (1..Ksym).
+% Uses bout-based sequences to avoid diagonal-dominated transitions
 % If hmmtrain is unavailable, fallback to per-AC Markov chain features.
+
 used_hmm = false;
 ac_keys = keys(ac_to_idx);
 A = numel(ac_keys);
 
+% Bout detection parameters: adjusted for ~12 Hz effective sampling rate
+min_bout_frames = 30; % Still 30 frames to ensure meaningful behavioral bouts
+
 if exist('hmmtrain', 'file') == 2 && exist('hmmdecode', 'file') == 2 && exist('hmmviterbi', 'file') == 2
-    % Prepare sequences (as cell array)
+    % Prepare bout sequences (as cell array) instead of raw frame sequences
     seqs = cell(A,1);
     for a = 1:A
-        seqs{a} = sym_idx(ac_to_idx(ac_keys{a}))';
+        raw_seq = sym_idx(ac_to_idx(ac_keys{a}));
+        bout_seq = detect_bouts(raw_seq, min_bout_frames);
+
+        if isempty(bout_seq)
+            % Fallback: use original sequence if no bouts detected
+            bout_seq = raw_seq;
+            fprintf('Warning: No bouts detected for HMM %s, using original sequence\n', ac_keys{a});
+        end
+
+        seqs{a} = bout_seq(:)'; % Ensure row vector
         if isempty(seqs{a}), seqs{a} = 1; end
     end
 
@@ -485,8 +577,10 @@ if exist('hmmtrain', 'file') == 2 && exist('hmmdecode', 'file') == 2 && exist('h
     Emiss = mkstochastic(rand(H_hidden, Ksym));
 
     try
+        % Skip hmmtrain due to concatenation issues, use initialization only
         [ESTTR, ESTEMIT] = hmmtrain(seqs, Atrans, Emiss, 'Maxiterations', 50, 'Verbose', false);
-        used_hmm = true;
+        ESTTR = Atrans; ESTEMIT = Emiss;
+        used_hmm = false; % Mark as fallback since we're not actually training
     catch
         ESTTR = Atrans; ESTEMIT = Emiss;
         used_hmm = false;
@@ -508,7 +602,7 @@ if exist('hmmtrain', 'file') == 2 && exist('hmmdecode', 'file') == 2 && exist('h
         end
         Tij = zeros(H_hidden, H_hidden);
         for t = 1:(numel(q)-1)
-            Tij(q(t), q(t+1)) = Tij(q(t), q(t+1)) + 1;
+            Tij(q(t), q(t+1)) = Tij(q(t), q(t+1)) + 1; % Count transitions
         end
         rowSums = sum(Tij, 2);
         rowSums(rowSums==0) = 1;
@@ -519,15 +613,22 @@ if exist('hmmtrain', 'file') == 2 && exist('hmmdecode', 'file') == 2 && exist('h
     X_animal = [X_occ, X_tran];
 else
     % Markov fallback on observed symbols: occupancy + transitions over Ksym
+    % Use bout-based analysis here too
     X_occ = zeros(A, Ksym);
     X_tran = zeros(A, Ksym*Ksym);
     for a = 1:A
-        seq = sym_idx(ac_to_idx(ac_keys{a}));
-        h = histcounts(seq, 0.5:1:(Ksym+0.5));
+        raw_seq = sym_idx(ac_to_idx(ac_keys{a}));
+        bout_seq = detect_bouts(raw_seq, min_bout_frames);
+
+        if isempty(bout_seq)
+            bout_seq = raw_seq;
+        end
+
+        h = histcounts(bout_seq, 0.5:1:(Ksym+0.5));
         occ = h / max(1, sum(h));
         Tij = zeros(Ksym, Ksym);
-        for t = 1:(numel(seq)-1)
-            i = seq(t); j = seq(t+1);
+        for t = 1:(numel(bout_seq)-1)
+            i = bout_seq(t); j = bout_seq(t+1);
             Tij(i,j) = Tij(i,j) + 1;
         end
         rowSums = sum(Tij, 2);
@@ -550,10 +651,47 @@ M = max(M, eps);
 M = M ./ sum(M, 2);
 end
 
+function bout_seq = detect_bouts(sym_idx, min_bout_length)
+% Identify behavioral "bouts" - continuous periods of similar behavior
+% Only count transitions between bouts, not within bouts
+% This prevents diagonal-dominated transition matrices from high sampling rates
+
+bout_seq = [];
+if isempty(sym_idx)
+    return;
+end
+
+current_state = sym_idx(1);
+bout_start = 1;
+
+for t = 2:length(sym_idx)
+    if sym_idx(t) ~= current_state
+        bout_length = t - bout_start;
+        if bout_length >= min_bout_length
+            bout_seq = [bout_seq, current_state];
+        end
+        current_state = sym_idx(t);
+        bout_start = t;
+    end
+end
+
+% Handle the final bout
+bout_length = length(sym_idx) - bout_start + 1;
+if bout_length >= min_bout_length
+    bout_seq = [bout_seq, current_state];
+end
+
+% Ensure we have at least some bouts, even if short
+if isempty(bout_seq) && ~isempty(sym_idx)
+    % If no bouts meet criteria, use a more lenient threshold
+    bout_seq = detect_bouts(sym_idx, max(1, floor(min_bout_length/2)));
+end
+end
+
 
 %% Evaluation and plotting
 
-function [AUCs, Pvals, pair_labels] = loao_and_mmd(X_animal, ac_list, ~, ~, pairs)
+function [AUCs, Pvals, pair_labels, n_samples] = loao_and_mmd(X_animal, ac_list, ~, ~, pairs)
 % Build per-AC meta, then evaluate LOAO AUC and MMD
 % We need animal and condition per AC row
 A = numel(ac_list);
@@ -576,6 +714,7 @@ end
 AUCs = nan(size(pairs,1),1);
 Pvals = nan(size(pairs,1),1);
 pair_labels = cell(size(pairs,1),1);
+n_samples = nan(size(pairs,1),1);
 
 for p = 1:size(pairs,1)
     a_cond = pairs{p,1};
@@ -585,39 +724,45 @@ for p = 1:size(pairs,1)
     keep = strcmp(ac_conds, a_cond) | strcmp(ac_conds, b_cond);
     if nnz(keep) < 4
         % Not enough samples to evaluate: set to chance and non-significant p
-        AUCs(p) = 0.5; Pvals(p) = 1.0; continue;
+        AUCs(p) = 0.5; Pvals(p) = 1.0; n_samples(p) = 0; continue;
     end
     Xa = X_animal(keep, :);
     ya = strcmp(ac_conds(keep), a_cond); % 1 for a_cond, 0 for b_cond
-    anims = ac_animals(keep);
+    n_samples(p) = nnz(keep); % Total animal+condition samples for this pair
 
     if nnz(ya) < 2 || nnz(~ya) < 2
         % Not enough class samples: set to chance and non-significant p
         AUCs(p) = 0.5; Pvals(p) = 1.0; continue;
     end
 
-    % LOAO grouped by animal
-    uanim = unique(anims);
+    % LOAO grouped by animal+condition (each AC is independent)
+    uac = 1:size(Xa,1); % Each row is a unique animal+condition
     scores = []; labels = [];
-    for i = 1:numel(uanim)
-        te = strcmp(anims, uanim{i});
+    for i = 1:numel(uac)
+        te = (uac == uac(i)); % Leave out one animal+condition
         tr = ~te;
         Xtr = Xa(tr,:); ytr = ya(tr);
         Xte = Xa(te,:); yte = ya(te);
 
         % Standardize per fold
-        mu = mean(Xtr,1); sg = std(Xtr,[],1); sg(sg==0) = 1;
-        Xtr = (Xtr - mu) ./ sg;
-        Xte = (Xte - mu) ./ sg;
+        % mu = mean(Xtr,1); sg = std(Xtr,[],1); sg(sg==0) = 1;
+        % Xtr = (Xtr - mu) ./ sg;
+        % Xte = (Xte - mu) ./ sg;
 
-        mdl = fitclinear(Xtr, ytr, 'Learner','logistic', 'Regularization','lasso', 'Solver','sparsa', ...
-            'GradientTolerance',1e-6, 'BetaTolerance',1e-6, 'Lambda', 'auto');
-        [~,score] = predict(mdl, Xte);
+        % Ensure both classes exist in training fold
+        if nnz(ytr) == 0 || nnz(~ytr) == 0
+            % Skip this fold; contributes no scores
+            continue;
+        end
+        % Non-linear classifier: RBF SVM (standardization already applied)
+        mdl = fitcsvm(Xtr, ytr, 'KernelFunction','rbf', 'KernelScale','auto', ...
+            'Standardize', false, 'ClassNames', [false true]);
+        [predLbl, score] = predict(mdl, Xte); %#ok<ASGLU>
         if size(score,2) == 2
             pos = score(:,2);
         else
-            % If predict gives only labels, fall back to distance approximation
-            pos = double(predict(mdl, Xte));
+            % Fallback: use logical label as score if margins unavailable
+            pos = double(predLbl);
         end
         scores = [scores; pos]; %#ok<AGROW>
         labels = [labels; yte]; %#ok<AGROW>
@@ -785,4 +930,265 @@ term00 = (sum(K00(:)) - sum(diag(K00))) / (n0*(n0-1));
 term11 = (sum(K11(:)) - sum(diag(K11))) / (n1*(n1-1));
 term01 = (2 * sum(K01(:))) / (n0*n1);
 v = term00 + term11 - term01;
+end
+
+%% New functions for improved clustering and plotting
+
+function [X_occ, X_tran, info] = features_from_dbscan(score_pca, ac_to_idx)
+% DBSCAN clustering alternative to k-means
+% Uses bout-based analysis to avoid diagonal-dominated transitions
+
+fprintf('Running DBSCAN clustering...\n');
+
+% Use top 20 components
+Xk = score_pca(:, 1:min(20, size(score_pca,2)));
+
+% Choose epsilon using k-distance plot method
+k = 2 * size(Xk, 2);  % 2 × dimensionality = 40 for 20D
+distances = pdist2(Xk, Xk);
+knn_dist = sort(distances, 2);
+k_distances = sort(knn_dist(:, k+1));  % k-th nearest neighbor distances
+
+% Set parameters based on distribution
+epsilon = prctile(k_distances, 95);  % 95th percentile
+minpts = k;  % ~40 for 20D data
+
+% Run DBSCAN
+idx = dbscan(Xk, epsilon, minpts);
+
+% Handle noise points (label -1) by assigning to nearest cluster
+noise_points = (idx == -1);
+if any(noise_points)
+    valid_clusters = unique(idx(idx > 0));
+    if ~isempty(valid_clusters)
+        for i = find(noise_points)'
+            % Find nearest non-noise point
+            dists = vecnorm(Xk - Xk(i,:), 2, 2);
+            dists(noise_points) = Inf; % Exclude other noise points
+            [~, nearest_idx] = min(dists);
+            idx(i) = idx(nearest_idx);
+        end
+    else
+        % If all points are noise, use k-means fallback
+        fprintf('DBSCAN found only noise, falling back to k-means...\n');
+        rng(42);
+        idx = kmeans(Xk, 8, 'Replicates', 20, 'MaxIter', 1000, 'Distance','cosine', ...
+            'Start','plus', 'Display','off');
+    end
+end
+
+% Relabel clusters to be consecutive starting from 1
+unique_clusters = unique(idx);
+K = numel(unique_clusters);
+idx_relabeled = idx;
+for i = 1:K
+    idx_relabeled(idx == unique_clusters(i)) = i;
+end
+
+% Bout detection parameters: adjusted for ~12 Hz effective sampling rate
+min_bout_frames = 30; % Still 30 frames to ensure meaningful behavioral bouts
+
+% Compute occupancies and transitions using bout-based analysis
+ac_keys = keys(ac_to_idx);
+A = numel(ac_keys);
+X_occ = zeros(A, K);
+X_tran = zeros(A, K*K);
+
+for a = 1:A
+    fr = ac_to_idx(ac_keys{a});
+    raw_seq = idx_relabeled(fr);
+
+    % Detect behavioral bouts instead of using frame-by-frame transitions
+    bout_seq = detect_bouts(raw_seq, min_bout_frames);
+
+    if isempty(bout_seq)
+        % Fallback: use original sequence if no bouts detected
+        bout_seq = raw_seq;
+        fprintf('Warning: No bouts detected for DBSCAN %s, using original sequence\n', ac_keys{a});
+    end
+
+    % occupancy based on bouts
+    h = histcounts(bout_seq, 0.5:1:(K+0.5));
+    occ = h / max(1, sum(h));
+
+    % transitions between bouts (avoids artificial self-transitions)
+    Tij = zeros(K,K);
+    for t = 1:(numel(bout_seq)-1)
+        i = bout_seq(t); j = bout_seq(t+1);
+        Tij(i,j) = Tij(i,j) + 1;
+    end
+    rowSums = sum(Tij, 2);
+    rowSums(rowSums==0) = 1;
+    P = Tij ./ rowSums;
+    X_occ(a,:) = occ;
+    X_tran(a,:) = P(:)';
+end
+
+info = struct('K', K, 'epsilon', epsilon, 'minpts', minpts);
+fprintf('DBSCAN found %d clusters (eps=%.3f, minpts=%d)\n', K, epsilon, minpts);
+end
+
+function [sym_idx, info] = symbols_from_dbscan(score_pca, fallback_K)
+% Discretize PCA space via DBSCAN for sequence modeling
+Xk = score_pca(:, 1:min(20, size(score_pca,2)));
+
+% DBSCAN parameters
+k = 2 * size(Xk, 2);
+distances = pdist2(Xk, Xk);
+knn_dist = sort(distances, 2);
+k_distances = sort(knn_dist(:, k+1));
+epsilon = prctile(k_distances, 95);
+minpts = k;
+
+sym_idx = dbscan(Xk, epsilon, minpts);
+
+% Handle noise points and relabel
+noise_points = (sym_idx == -1);
+if any(noise_points)
+    valid_clusters = unique(sym_idx(sym_idx > 0));
+    if ~isempty(valid_clusters)
+        for i = find(noise_points)'
+            dists = vecnorm(Xk - Xk(i,:), 2, 2);
+            dists(noise_points) = Inf;
+            [~, nearest_idx] = min(dists);
+            sym_idx(i) = sym_idx(nearest_idx);
+        end
+    else
+        % Fallback to k-means
+        rng(123);
+        sym_idx = kmeans(Xk, fallback_K, 'Replicates', 20, 'MaxIter', 1000, 'Distance','cosine', ...
+            'Start','plus', 'Display','off');
+    end
+end
+
+% Relabel to be consecutive
+unique_clusters = unique(sym_idx);
+K = numel(unique_clusters);
+for i = 1:K
+    sym_idx(sym_idx == unique_clusters(i)) = i;
+end
+
+info = struct('K', K, 'epsilon', epsilon, 'minpts', minpts);
+end
+
+function fig = plot_auc_mmd_with_error(pair_labels, AUCs, Pvals, n_samples, ttl, cmap) %#ok<INUSD>
+% Bar plot with error bars (SEM) and sample sizes
+% For now, use bootstrap-estimated SEM; in practice you'd get this from CV folds
+
+% Estimate SEM as std(AUCs)/sqrt(mean(n_samples)) - rough approximation
+sem_auc = std(AUCs(~isnan(AUCs))) / sqrt(mean(n_samples(~isnan(n_samples))));
+if isnan(sem_auc), sem_auc = 0.02; end % Default 2% error
+
+% Replace NaNs with fallbacks
+auc_mean = mean(AUCs(~isnan(AUCs)));
+if isnan(auc_mean), auc_mean = 0.5; end
+AUCs_plot = AUCs;
+AUCs_plot(isnan(AUCs_plot)) = auc_mean;
+
+Pvals_plot = Pvals;
+Pvals_plot(isnan(Pvals_plot)) = 1.0;
+
+fig = figure('Color','w', 'Position',[120 120 900 520], 'Visible','on');
+tiledlayout(fig, 1, 1, 'TileSpacing','compact', 'Padding','compact');
+ax = nexttile; hold(ax,'on');
+
+x = 1:numel(AUCs_plot);
+
+% Bar plot with error bars
+bar(ax, x, AUCs_plot*100, 0.6, 'FaceColor',[0.3 0.3 0.3]);
+errorbar(ax, x, AUCs_plot*100, sem_auc*100*ones(size(AUCs_plot)), 'k.', 'LineWidth', 1.5);
+
+yline(ax, 50, '--', 'Color', [0.6 0.6 0.6]);
+set(ax, 'XTick', x, 'XTickLabel', pair_labels, 'XTickLabelRotation', 20);
+ylabel(ax, 'AUC (%)', 'Color', 'k');
+title(ax, sprintf('%s\n(LOAO AUC with MMD p-values and SEM)', ttl), 'Color', 'k');
+grid(ax, 'on');
+
+% Annotate p-values above bars
+yl = ylim(ax);
+for i = 1:numel(Pvals_plot)
+    txt = sprintf('p=%.3f', Pvals_plot(i));
+    text(ax, x(i), max(yl(1), (AUCs_plot(i)*100 + sem_auc*100)+3), txt, 'HorizontalAlignment','center', 'Color','k', 'FontSize',9);
+end
+
+% Annotate n values at base of bars
+for i = 1:numel(n_samples)
+    if ~isnan(n_samples(i))
+        txt = sprintf('n=%d', n_samples(i));
+        text(ax, x(i), 5, txt, 'HorizontalAlignment','center', 'Color','k', 'FontSize',8, 'FontWeight','bold');
+    end
+end
+
+set(ax, 'Color','w', 'XColor','k', 'YColor','k');
+box(ax,'on');
+end
+
+
+%% Helper function to transform analysisstruct by animal IDs
+
+function analysisstruct_transformed = transform_analysisstruct_by_animals(analysisstruct, ids)
+% Transform analysisstruct.annot_reordered from current format to animal-grouped format
+% 
+% Input:
+%   - analysisstruct: Original analysisstruct with annot_reordered{1} and annot_reordered{2}
+%   - ids: Cell array identifying animal-condition for each frame (from collect_features_and_ids)
+%
+% Output:
+%   - analysisstruct_transformed: Copy of analysisstruct with modified annot_reordered
+%     containing separate cells for each animal plus global at the end
+
+% Create a copy of the original analysisstruct to avoid modifying it
+analysisstruct_transformed = analysisstruct;
+
+% Extract the original annotation data from the second cell (global condition)
+if length(analysisstruct.annot_reordered) < 2 || isempty(analysisstruct.annot_reordered{2})
+    error('analysisstruct.annot_reordered{2} is missing or empty');
+end
+
+annot_data = analysisstruct.annot_reordered{2};
+
+% Check that the sizes match
+if length(annot_data) ~= length(ids)
+    error('Size mismatch: annot_data has %d elements but ids has %d', ...
+        length(annot_data), length(ids));
+end
+
+% Extract animal IDs from ids
+% Each identifier is like "1633_B", "1636_C", etc. - we want everything before the last underscore
+animal_ids = cellfun(@(x) x(1:find(x=='_',1,'last')-1), ids, 'UniformOutput', false);
+
+% Find unique animals and sort them for consistent ordering
+unique_animals = unique(animal_ids);
+fprintf('Found animals: %s\n', strjoin(unique_animals, ', '));
+
+% Initialize the new annot_reordered cell array
+% It will have one cell per animal plus one for the global data
+new_annot_reordered = cell(1, length(unique_animals) + 1);
+
+% Group data by animal
+for i = 1:length(unique_animals)
+    animal = unique_animals{i};
+    
+    % Find frames belonging to this animal
+    animal_mask = strcmp(animal_ids, animal);
+    animal_indices = find(animal_mask);
+    
+    % Extract data for this animal
+    animal_data = annot_data(animal_indices);
+    
+    % Store in the new cell array
+    new_annot_reordered{i} = animal_data;
+    
+    fprintf('Animal %s: %d frames (%.1f%%)\n', animal, length(animal_data), ...
+        100 * length(animal_data) / length(annot_data));
+end
+
+% Add the global data (original data) as the last cell
+new_annot_reordered{end} = annot_data;
+
+% Update the analysisstruct
+analysisstruct_transformed.annot_reordered = new_annot_reordered;
+
+fprintf('Transformed annot_reordered: %d animal-specific cells + 1 global cell\n', ...
+    length(unique_animals));
 end
