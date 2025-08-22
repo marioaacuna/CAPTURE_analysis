@@ -763,15 +763,17 @@ end
 
 % Organize data by condition for statistical analysis
 condition_movement_data = struct();
-movement_metric_names = {'total_distance_cm', 'mean_velocity_moving_cm_s', ...
-                         'percent_time_in_center', 'percent_time_rearing', ...
-                         'path_tortuosity', ...
-                         'movement_predictability'};
+movement_metric_names = {'total_distance_cm', 'mean_velocity_moving_cm_s', 'mean_velocity_overall_cm_s', ...
+                         'percent_time_moving', 'percent_time_in_center', 'percent_time_rearing', ...
+                         'path_tortuosity', 'tortuosity_std', 'max_tortuosity', 'num_crossings', ...
+                         'mean_angular_velocity_rad_s', 'std_angular_velocity_rad_s', 'max_angular_velocity_rad_s', ...
+                         'turn_rate_per_s', 'movement_entropy', 'normalized_entropy', 'movement_predictability'};
 
-
-metric_titles = {'Total Distance (cm)', 'Mean Velocity When Moving (cm/s)', ...
-                'Time in Center (%)', 'Time Rearing (%)', ...
-                'Path Tortuosity',  'Movement Predictability'}; % 'Turn Rate (turns/s)', 'Movement Entropy (normalized)'
+metric_titles = {'Total Distance (cm)', 'Mean Velocity When Moving (cm/s)', 'Mean Velocity Overall (cm/s)', ...
+                'Time Moving (%)', 'Time in Center (%)', 'Time Rearing (%)', ...
+                'Path Tortuosity', 'Tortuosity Std', 'Max Tortuosity', 'Number of Crossings', ...
+                'Mean Angular Velocity (rad/s)', 'Angular Velocity Std (rad/s)', 'Max Angular Velocity (rad/s)', ...
+                'Turn Rate (turns/s)', 'Movement Entropy', 'Normalized Entropy', 'Movement Predictability'};
 
 
 
@@ -797,15 +799,18 @@ for i = 1:length(movement_animal_ids)
     end
 end
 
-% Create summary figure
-fig_movement = figure('Position', [100, 100, 1800, 1200], 'Color', 'white');
+% Create comprehensive summary figure with all metrics
+fig_movement = figure('Position', [50, 50, 2400, 1800], 'Color', 'white');
 set(gca, 'Color', 'white');
-
 
 colors = lines(length(unique_conditions));
 
+% Calculate subplot layout for 17 metrics (5x4 grid)
+n_cols = 5;
+n_rows = 4;
+
 for metric_idx = 1:length(movement_metric_names)
-    subplot(3, 3, metric_idx);
+    subplot(n_rows, n_cols, metric_idx);
     
     metric_name = movement_metric_names{metric_idx};
     
@@ -846,11 +851,173 @@ for metric_idx = 1:length(movement_metric_names)
     set(gca, 'TickDir', 'out');
 end
 
-sgtitle('Movement & Complexity Metrics by Condition', 'FontSize', 18, 'FontName', 'Arial', 'Color', 'black');
+sgtitle('Comprehensive Movement & Complexity Metrics by Condition (All Features)', 'FontSize', 20, 'FontName', 'Arial', 'Color', 'black');
 
 % Export figure
-fig_filename = fullfile(GC.figure_folder,'movement_metrics_mocap.pdf');
+fig_filename = fullfile(GC.figure_folder,'movement_metrics_comprehensive_mocap.pdf');
 exportgraphics(fig_movement, fig_filename);
+
+%% 5.2 Create Organized Subset Plots for Better Visualization
+
+% Basic Movement Metrics
+fig_basic = figure('Position', [100, 200, 1400, 800], 'Color', 'white');
+basic_metrics = {'total_distance_cm', 'mean_velocity_moving_cm_s', 'mean_velocity_overall_cm_s', 'percent_time_moving'};
+basic_titles = {'Total Distance (cm)', 'Mean Velocity When Moving (cm/s)', 'Mean Velocity Overall (cm/s)', 'Time Moving (%)'};
+
+for i = 1:length(basic_metrics)
+    subplot(2, 2, i);
+    metric_name = basic_metrics{i};
+    
+    means = zeros(1, length(unique_conditions));
+    errors = zeros(1, length(unique_conditions));
+    
+    for cond_idx = 1:length(unique_conditions)
+        cond = unique_conditions{cond_idx};
+        data = condition_movement_data.(cond).(metric_name);
+        if ~isempty(data)
+            means(cond_idx) = mean(data);
+            errors(cond_idx) = std(data) / sqrt(length(data));
+        end
+    end
+    
+    bar_handles = bar(1:length(unique_conditions), means, 'FaceColor', 'flat');
+    hold on;
+    for cond_idx = 1:length(unique_conditions)
+        bar_handles.CData(cond_idx, :) = colors(cond_idx, :);
+    end
+    errorbar(1:length(unique_conditions), means, errors, 'k.', 'LineWidth', 1.5);
+    
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    ylabel(basic_titles{i}, 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    xlabel('Condition', 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    title(basic_titles{i}, 'FontSize', 14, 'FontName', 'Arial', 'Color', 'black');
+    grid off; box off; set(gca, 'TickDir', 'out');
+    set(gca, 'FontSize', 10, 'FontName', 'Arial', 'Color', 'white');
+end
+
+sgtitle('Basic Movement Metrics', 'FontSize', 18, 'FontName', 'Arial', 'Color', 'black');
+fig_filename = fullfile(GC.figure_folder,'movement_basic_metrics_mocap.pdf');
+exportgraphics(fig_basic, fig_filename);
+
+% Spatial Behavior Metrics
+fig_spatial = figure('Position', [200, 300, 1000, 600], 'Color', 'white');
+spatial_metrics = {'percent_time_in_center', 'percent_time_rearing', 'num_crossings'};
+spatial_titles = {'Time in Center (%)', 'Time Rearing (%)', 'Number of Crossings'};
+
+for i = 1:length(spatial_metrics)
+    subplot(1, 3, i);
+    metric_name = spatial_metrics{i};
+    
+    means = zeros(1, length(unique_conditions));
+    errors = zeros(1, length(unique_conditions));
+    
+    for cond_idx = 1:length(unique_conditions)
+        cond = unique_conditions{cond_idx};
+        data = condition_movement_data.(cond).(metric_name);
+        if ~isempty(data)
+            means(cond_idx) = mean(data);
+            errors(cond_idx) = std(data) / sqrt(length(data));
+        end
+    end
+    
+    bar_handles = bar(1:length(unique_conditions), means, 'FaceColor', 'flat');
+    hold on;
+    for cond_idx = 1:length(unique_conditions)
+        bar_handles.CData(cond_idx, :) = colors(cond_idx, :);
+    end
+    errorbar(1:length(unique_conditions), means, errors, 'k.', 'LineWidth', 1.5);
+    
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    ylabel(spatial_titles{i}, 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    xlabel('Condition', 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    title(spatial_titles{i}, 'FontSize', 14, 'FontName', 'Arial', 'Color', 'black');
+    grid off; box off; set(gca, 'TickDir', 'out');
+    set(gca, 'FontSize', 10, 'FontName', 'Arial', 'Color', 'white');
+end
+
+sgtitle('Spatial Behavior Metrics', 'FontSize', 18, 'FontName', 'Arial', 'Color', 'black');
+fig_filename = fullfile(GC.figure_folder,'movement_spatial_metrics_mocap.pdf');
+exportgraphics(fig_spatial, fig_filename);
+
+% Movement Complexity Metrics
+fig_complexity = figure('Position', [300, 400, 1800, 800], 'Color', 'white');
+complexity_metrics = {'path_tortuosity', 'tortuosity_std', 'max_tortuosity', 'turn_rate_per_s', 'normalized_entropy', 'movement_predictability'};
+complexity_titles = {'Path Tortuosity', 'Tortuosity Std', 'Max Tortuosity', 'Turn Rate (turns/s)', 'Normalized Entropy', 'Movement Predictability'};
+
+for i = 1:length(complexity_metrics)
+    subplot(2, 3, i);
+    metric_name = complexity_metrics{i};
+    
+    means = zeros(1, length(unique_conditions));
+    errors = zeros(1, length(unique_conditions));
+    
+    for cond_idx = 1:length(unique_conditions)
+        cond = unique_conditions{cond_idx};
+        data = condition_movement_data.(cond).(metric_name);
+        if ~isempty(data)
+            means(cond_idx) = mean(data);
+            errors(cond_idx) = std(data) / sqrt(length(data));
+        end
+    end
+    
+    bar_handles = bar(1:length(unique_conditions), means, 'FaceColor', 'flat');
+    hold on;
+    for cond_idx = 1:length(unique_conditions)
+        bar_handles.CData(cond_idx, :) = colors(cond_idx, :);
+    end
+    errorbar(1:length(unique_conditions), means, errors, 'k.', 'LineWidth', 1.5);
+    
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    ylabel(complexity_titles{i}, 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    xlabel('Condition', 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    title(complexity_titles{i}, 'FontSize', 14, 'FontName', 'Arial', 'Color', 'black');
+    grid off; box off; set(gca, 'TickDir', 'out');
+    set(gca, 'FontSize', 10, 'FontName', 'Arial', 'Color', 'white');
+end
+
+sgtitle('Movement Complexity Metrics', 'FontSize', 18, 'FontName', 'Arial', 'Color', 'black');
+fig_filename = fullfile(GC.figure_folder,'movement_complexity_metrics_mocap.pdf');
+exportgraphics(fig_complexity, fig_filename);
+
+% Angular Movement Metrics
+fig_angular = figure('Position', [400, 500, 1200, 600], 'Color', 'white');
+angular_metrics = {'mean_angular_velocity_rad_s', 'std_angular_velocity_rad_s', 'max_angular_velocity_rad_s', 'movement_entropy'};
+angular_titles = {'Mean Angular Velocity (rad/s)', 'Angular Velocity Std (rad/s)', 'Max Angular Velocity (rad/s)', 'Movement Entropy'};
+
+for i = 1:length(angular_metrics)
+    subplot(2, 2, i);
+    metric_name = angular_metrics{i};
+    
+    means = zeros(1, length(unique_conditions));
+    errors = zeros(1, length(unique_conditions));
+    
+    for cond_idx = 1:length(unique_conditions)
+        cond = unique_conditions{cond_idx};
+        data = condition_movement_data.(cond).(metric_name);
+        if ~isempty(data)
+            means(cond_idx) = mean(data);
+            errors(cond_idx) = std(data) / sqrt(length(data));
+        end
+    end
+    
+    bar_handles = bar(1:length(unique_conditions), means, 'FaceColor', 'flat');
+    hold on;
+    for cond_idx = 1:length(unique_conditions)
+        bar_handles.CData(cond_idx, :) = colors(cond_idx, :);
+    end
+    errorbar(1:length(unique_conditions), means, errors, 'k.', 'LineWidth', 1.5);
+    
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    ylabel(angular_titles{i}, 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    xlabel('Condition', 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    title(angular_titles{i}, 'FontSize', 14, 'FontName', 'Arial', 'Color', 'black');
+    grid off; box off; set(gca, 'TickDir', 'out');
+    set(gca, 'FontSize', 10, 'FontName', 'Arial', 'Color', 'white');
+end
+
+sgtitle('Angular Movement Metrics', 'FontSize', 18, 'FontName', 'Arial', 'Color', 'black');
+fig_filename = fullfile(GC.figure_folder,'movement_angular_metrics_mocap.pdf');
+exportgraphics(fig_angular, fig_filename);
 
 %% 6. Statistical Analysis for Movement Metrics
 fprintf('\n=== MOVEMENT METRICS STATISTICAL ANALYSIS ===\n');
