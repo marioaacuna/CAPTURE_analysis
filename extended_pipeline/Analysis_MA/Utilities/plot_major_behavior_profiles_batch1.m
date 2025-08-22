@@ -1,4 +1,10 @@
 %% Behavioral Analysis Pipeline for MoCap Data
+% This script takes concatenations of BSHFN data from all batches and
+% performs detection of several coarse behaviors
+% Additionally, it analysis genetal meobility features (distance travelled, 
+% mean velocity, etc)
+
+%% INIT
 % Extract and visualize temporal behavioral patterns
 clc, clear, close all
 global GC
@@ -34,10 +40,18 @@ load(fullfile(project_path, 'ratception_prediction.mat'), 'ratception_struct');
 %             ratception_struct.markers_preproc.(marker_fields{i})(1:3:end, :);
 %     end
 % end
+% Upsammple animal_condition_identifier
+rep_factor = size(ratception_struct.aligned_mean_position,1) / length(animal_condition_identifier);
+animal_condition_identifier = repelem(animal_condition_identifier, rep_factor);
 
-%% 3. Process all animals
+
 unique_conditions = {'B', 'S', 'F', 'H', 'N'};
 unique_animals = unique(cellfun(@(x) x(1:end-2), animal_condition_identifier, 'UniformOutput', false));
+
+% Get unique animal/condition combinations
+unique_animal_conditions = unique(animal_condition_identifier, 'stable');
+
+%% 3. Process coarse behaviors all animals
 
 % behavior_names = {'rearing', 'grooming', 'left_paw_licking', 'walking', 'quiet'};
 behavior_names = {'rearing', 'grooming', 'walking', 'quiet'};
@@ -46,8 +60,6 @@ behavior_names = {'rearing', 'grooming', 'walking', 'quiet'};
 all_behaviors = struct();
 condition_labels = {};
 
-% Get unique animal/condition combinations
-unique_animal_conditions = unique(animal_condition_identifier, 'stable');
 
 for i = 1:length(unique_animal_conditions)
     current_animal_condition = unique_animal_conditions{i};
@@ -432,4 +444,391 @@ for i = 1:length(behavior_names)
     end
 end
 
-fprintf('=== ANALYSIS COMPLETE ===\n');
+fprintf('=== ANALYSIS COARSE BEHAVIORS COMPLETE ===\n');
+
+
+%% INIT movement/displacement analysis %%
+
+fprintf('\n === Displacement analysis ===\n');
+
+% Sampling frequency and conversion factors
+sampling_freq = 300; % Hz
+arena_diameter = 24; % cm: not used
+center_diameter = 10; % cm
+center_radius = center_diameter / 2; % cm
+velocity_threshold = 1; % cm/s - threshold to consider mouse as "moving"
+
+% Initialize storage for movement metrics
+movement_metrics = struct();
+
+% Get animal IDs and clean them for proper matching
+animal_ids = fieldnames(all_behaviors);
+clean_animal_ids = cellfun(@(x) x(4:end), animal_ids, 'UniformOutput', false); % Remove 'ID_' prefix
+
+% 1. Calculate per-animal/condition movement metrics
+fprintf('Calculating movement metrics for each animal...\n');
+
+for i = 1:length(unique_animal_conditions)
+    current_animal_condition = unique_animal_conditions{i};
+    if strcmp(current_animal_condition, '1636_B'), continue, end
+    % Find corresponding fieldname in all_behaviors
+    matching_idx = ismember(clean_animal_ids, current_animal_condition);
+    if any(matching_idx)
+        matching_field = animal_ids{matching_idx};
+        
+        % Get frame indices for this animal
+        frame_indices = find(strcmp(animal_condition_identifier, current_animal_condition));
+        
+        if ~isempty(frame_indices)
+            % Extract SpineF position data (x, y, z coordinates in mm)
+            spine_pos = ratception_struct.markers_preproc.SpineF(frame_indices, :);
+            
+            % Convert from mm to cm
+            spine_pos_cm = spine_pos / 10;
+            
+            % 1. Calculate total distance moved (2D movement in x-y plane)
+            if size(spine_pos_cm, 1) > 1
+                displacement_2d = diff(spine_pos_cm(:, 1:2));
+                frame_distances = sqrt(sum(displacement_2d.^2, 2));
+                total_distance = sum(frame_distances); % in cm
+                
+                % 2. Calculate velocities
+                dt = 1/sampling_freq; % time between frames in seconds
+                velocities = frame_distances / dt; % cm/s
+                
+                % Mean velocity when moving (above threshold)
+                moving_mask = velocities > velocity_threshold;
+                if any(moving_mask)
+                    mean_velocity_moving = mean(velocities(moving_mask));
+                    time_spent_moving = sum(moving_mask) / sampling_freq; % seconds
+                    percent_time_moving = (sum(moving_mask) / length(velocities)) * 100;
+                else
+                    mean_velocity_moving = 0;
+                    time_spent_moving = 0;
+                    percent_time_moving = 0;
+                end
+                
+                % Overall mean velocity
+                mean_velocity_overall = mean(velocities);
+                
+                % 3. Calculate time spent in center (draft implementation)
+                % Find center of arena for this animal (mean position as approximation)
+                % animal_center_x = mean(spine_pos_cm(:, 1));
+                % animal_center_y = mean(spine_pos_cm(:, 2));
+
+                % Find the boundaries of movement
+                x_min = min(spine_pos_cm(:,1));
+                x_max = max(spine_pos_cm(:,1));
+                y_min = min(spine_pos_cm(:,2));
+                y_max = max(spine_pos_cm(:,2));
+
+                % Calculate the center of the arena
+                animal_center_x = (x_min + x_max) / 2;
+                animal_center_y = (y_min + y_max) / 2;
+
+                % Calculate distances from animal's estimated arena center
+                distances_from_center = sqrt((spine_pos_cm(:, 1) - animal_center_x).^2 + ...
+                                           (spine_pos_cm(:, 2) - animal_center_y).^2);
+                
+                % Frames spent in center (within center_radius)
+                in_center_mask = distances_from_center <= center_radius;
+                time_in_center = sum(in_center_mask) / sampling_freq; % seconds
+                percent_time_in_center = (sum(in_center_mask) / length(distances_from_center)) * 100;
+                
+                % 4. Time spent rearing (using existing behavioral data)
+                rearing_data = all_behaviors.(matching_field).rearing;
+                time_rearing = sum(rearing_data) / sampling_freq; % seconds
+                percent_time_rearing = (sum(rearing_data) / length(rearing_data)) * 100;
+                
+                % 5. Movement complexity metrics
+                % 5.1 Calculate path tortuosity (ratio of actual path to straight-line distance)
+                if size(spine_pos_cm, 1) > 2
+                    % Total path length (sum of all segments)
+                    total_path_length = total_distance; % already calculated above
+                    
+                    % Straight-line distance from start to end
+                    start_pos = spine_pos_cm(1, 1:2);
+                    end_pos = spine_pos_cm(end, 1:2);
+                    straight_line_distance = sqrt(sum((end_pos - start_pos).^2));
+                    
+                    % Tortuosity (1 = straight line, >1 = more tortuous)
+                    if straight_line_distance > 0.1 % Avoid division by very small numbers
+                        path_tortuosity = total_path_length / straight_line_distance;
+                    else
+                        path_tortuosity = 1; % If mouse didn't move much, consider it straight
+                    end
+                else
+                    path_tortuosity = 1;
+                end
+                
+                % 5.2 Compute angular velocity distribution
+                if size(spine_pos_cm, 1) > 2
+                    % Calculate heading angles between consecutive movements
+                    movement_vectors = diff(spine_pos_cm(:, 1:2));
+                    heading_angles = atan2(movement_vectors(:, 2), movement_vectors(:, 1));
+                    
+                    % Calculate angular changes (unwrap to handle 2π discontinuities)
+                    unwrapped_angles = unwrap(heading_angles);
+                    angular_changes = abs(diff(unwrapped_angles));
+                    
+                    % Angular velocity (rad/s)
+                    angular_velocities = angular_changes / dt;
+                    
+                    % Statistics
+                    mean_angular_velocity = mean(angular_velocities);
+                    std_angular_velocity = std(angular_velocities);
+                    max_angular_velocity = max(angular_velocities);
+                    
+                    % Count sharp turns (>90 degrees per frame)
+                    sharp_turns = sum(angular_changes > pi/2);
+                    turn_rate = sharp_turns / (length(angular_changes) / sampling_freq); % turns per second
+                else
+                    mean_angular_velocity = 0;
+                    std_angular_velocity = 0;
+                    max_angular_velocity = 0;
+                    turn_rate = 0;
+                end
+                
+                % 5.3 Analyze movement entropy/predictability
+                if size(spine_pos_cm, 1) > 10
+                    % Discretize movement directions into bins for entropy calculation
+                    n_direction_bins = 8; % 8 cardinal/ordinal directions (N, NE, E, SE, S, SW, W, NW)
+                    
+                    % Calculate movement directions
+                    movement_vectors = diff(spine_pos_cm(:, 1:2));
+                    movement_angles = atan2(movement_vectors(:, 2), movement_vectors(:, 1));
+                    
+                    % Convert to degrees and normalize to 0-360
+                    movement_angles_deg = mod(rad2deg(movement_angles), 360);
+                    
+                    % Bin the directions
+                    bin_edges = linspace(0, 360, n_direction_bins + 1);
+                    [direction_counts, ~] = histcounts(movement_angles_deg, bin_edges);
+                    
+                    % Calculate probabilities
+                    direction_probs = direction_counts / sum(direction_counts);
+                    direction_probs = direction_probs(direction_probs > 0); % Remove zero probabilities
+                    
+                    % Shannon entropy (higher = more unpredictable movement)
+                    if ~isempty(direction_probs)
+                        movement_entropy = -sum(direction_probs .* log2(direction_probs));
+                        % Normalize by maximum possible entropy
+                        max_entropy = log2(n_direction_bins);
+                        normalized_entropy = movement_entropy / max_entropy;
+                    else
+                        movement_entropy = 0;
+                        normalized_entropy = 0;
+                    end
+                    
+                    % Movement predictability (inverse of normalized entropy)
+                    movement_predictability = 1 - normalized_entropy;
+                else
+                    movement_entropy = 0;
+                    normalized_entropy = 0;
+                    movement_predictability = 1; % Very predictable if no movement
+                end
+                
+            else
+                % Handle case with insufficient data
+                total_distance = 0;
+                mean_velocity_moving = 0;
+                mean_velocity_overall = 0;
+                time_spent_moving = 0;
+                percent_time_moving = 0;
+                time_in_center = 0;
+                percent_time_in_center = 0;
+                time_rearing = 0;
+                percent_time_rearing = 0;
+                path_tortuosity = 1;
+                mean_angular_velocity = 0;
+                std_angular_velocity = 0;
+                max_angular_velocity = 0;
+                turn_rate = 0;
+                movement_entropy = 0;
+                normalized_entropy = 0;
+                movement_predictability = 1;
+            end
+            
+            % Store metrics
+            movement_metrics.(['ID_', current_animal_condition]) = struct(...
+                'total_distance_cm', total_distance, ...
+                'mean_velocity_moving_cm_s', mean_velocity_moving, ...
+                'mean_velocity_overall_cm_s', mean_velocity_overall, ...
+                'time_spent_moving_s', time_spent_moving, ...
+                'percent_time_moving', percent_time_moving, ...
+                'time_in_center_s', time_in_center, ...
+                'percent_time_in_center', percent_time_in_center, ...
+                'time_rearing_s', time_rearing, ...
+                'percent_time_rearing', percent_time_rearing, ...
+                'path_tortuosity', path_tortuosity, ...
+                'mean_angular_velocity_rad_s', mean_angular_velocity, ...
+                'std_angular_velocity_rad_s', std_angular_velocity, ...
+                'max_angular_velocity_rad_s', max_angular_velocity, ...
+                'turn_rate_per_s', turn_rate, ...
+                'movement_entropy', movement_entropy, ...
+                'normalized_entropy', normalized_entropy, ...
+                'movement_predictability', movement_predictability, ...
+                'condition', current_animal_condition(end) ...
+            );
+            
+            fprintf('Animal %s: Distance=%.1f cm, Vel=%.1f cm/s, Tortuous=%.2f, Entropy=%.2f, Turns=%.1f/s\n', ...
+                current_animal_condition, total_distance, mean_velocity_moving, ...
+                path_tortuosity, normalized_entropy, turn_rate);
+        end
+    end
+end
+
+%% 5. Movement Metrics Summary and Visualization
+
+% Organize data by condition for statistical analysis
+condition_movement_data = struct();
+movement_metric_names = {'total_distance_cm', 'mean_velocity_moving_cm_s', ...
+                         'percent_time_in_center', 'percent_time_rearing', ...
+                         'path_tortuosity', ...
+                         'movement_predictability'};
+
+
+metric_titles = {'Total Distance (cm)', 'Mean Velocity When Moving (cm/s)', ...
+                'Time in Center (%)', 'Time Rearing (%)', ...
+                'Path Tortuosity',  'Movement Predictability'}; % 'Turn Rate (turns/s)', 'Movement Entropy (normalized)'
+
+
+
+for i = 1:length(unique_conditions)
+    cond = unique_conditions{i};
+    condition_movement_data.(cond) = struct();
+    
+    % Initialize arrays for each metric
+    for j = 1:length(movement_metric_names)
+        condition_movement_data.(cond).(movement_metric_names{j}) = [];
+    end
+end
+
+% Fill condition data
+movement_animal_ids = fieldnames(movement_metrics);
+for i = 1:length(movement_animal_ids)
+    animal_data = movement_metrics.(movement_animal_ids{i});
+    cond = animal_data.condition;
+    
+    for j = 1:length(movement_metric_names)
+        metric_name = movement_metric_names{j};
+        condition_movement_data.(cond).(metric_name) = [condition_movement_data.(cond).(metric_name), animal_data.(metric_name)];
+    end
+end
+
+% Create summary figure
+fig_movement = figure('Position', [100, 100, 1800, 1200], 'Color', 'white');
+set(gca, 'Color', 'white');
+
+
+colors = lines(length(unique_conditions));
+
+for metric_idx = 1:length(movement_metric_names)
+    subplot(3, 3, metric_idx);
+    
+    metric_name = movement_metric_names{metric_idx};
+    
+    % Prepare data for bar plot
+    means = zeros(1, length(unique_conditions));
+    errors = zeros(1, length(unique_conditions));
+    
+    for cond_idx = 1:length(unique_conditions)
+        cond = unique_conditions{cond_idx};
+        data = condition_movement_data.(cond).(metric_name);
+        
+        if ~isempty(data)
+            means(cond_idx) = mean(data);
+            errors(cond_idx) = std(data) / sqrt(length(data)); % SEM
+        end
+    end
+    
+    % Create bar plot with error bars
+    bar_handles = bar(1:length(unique_conditions), means, 'FaceColor', 'flat');
+    hold on;
+    
+    % Color bars by condition
+    for cond_idx = 1:length(unique_conditions)
+        bar_handles.CData(cond_idx, :) = colors(cond_idx, :);
+    end
+    
+    errorbar(1:length(unique_conditions), means, errors, 'k.', 'LineWidth', 1.5);
+    
+    set(gca, 'XTick', 1:length(unique_conditions), 'XTickLabel', unique_conditions);
+    ylabel(metric_titles{metric_idx}, 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    xlabel('Condition', 'FontSize', 12, 'FontName', 'Arial', 'Color', 'black');
+    title(metric_titles{metric_idx}, 'FontSize', 14, 'FontName', 'Arial', 'Color', 'black');
+    grid off;
+    box off
+    set(gca, 'GridColor', 'black', 'GridAlpha', 0.3);
+    set(gca, 'FontSize', 10, 'FontName', 'Arial');
+    set(gca, 'Color', 'white');
+    set(gca, 'TickDir', 'out');
+end
+
+sgtitle('Movement & Complexity Metrics by Condition', 'FontSize', 18, 'FontName', 'Arial', 'Color', 'black');
+
+% Export figure
+fig_filename = fullfile(GC.figure_folder,'movement_metrics_mocap.pdf');
+exportgraphics(fig_movement, fig_filename);
+
+%% 6. Statistical Analysis for Movement Metrics
+fprintf('\n=== MOVEMENT METRICS STATISTICAL ANALYSIS ===\n');
+
+for metric_idx = 1:length(movement_metric_names)
+    metric_name = movement_metric_names{metric_idx};
+    
+    % Prepare data for ANOVA
+    group_data = [];
+    group_labels = [];
+    
+    for cond_idx = 1:length(unique_conditions)
+        cond = unique_conditions{cond_idx};
+        data = condition_movement_data.(cond).(metric_name);
+        
+        if ~isempty(data)
+            group_data = [group_data; data(:)];
+            group_labels = [group_labels; repmat({cond}, length(data), 1)];
+        end
+    end
+    
+    if length(unique(group_labels)) > 1 && length(group_data) > 1
+        [p_value, ~, stats] = anova1(group_data, group_labels, 'off');
+        fprintf('%s: p = %.3f\n', metric_titles{metric_idx}, p_value);
+    end
+end
+
+fprintf('\n=== MOVEMENT ANALYSIS COMPLETE ===\n');
+fprintf('\nNOTE: Center calculation is based on mean position per animal.\n');
+fprintf('This is a draft implementation that may need refinement based on your specific arena setup.\n');
+
+%% 7. Summary of Movement Complexity Metrics
+fprintf('\n=== MOVEMENT COMPLEXITY METRICS SUMMARY ===\n');
+fprintf('Path Tortuosity: 1.0 = straight line, >1.0 = more tortuous/winding path\n');
+fprintf('Angular Velocity: Measures rotational movement speed (rad/s)\n');
+fprintf('Turn Rate: Number of sharp turns (>90°) per second\n');
+fprintf('Movement Entropy: 0-1 scale, higher = more unpredictable movement patterns\n');
+fprintf('Movement Predictability: 1-entropy, higher = more stereotypic behavior\n\n');
+
+% Calculate and display overall condition summaries
+fprintf('CONDITION SUMMARIES:\n');
+for cond_idx = 1:length(unique_conditions)
+    cond = unique_conditions{cond_idx};
+    fprintf('\nCondition %s:\n', cond);
+    
+    % Calculate means for this condition
+    total_dist = condition_movement_data.(cond).total_distance_cm;
+    tortuosity = condition_movement_data.(cond).path_tortuosity;
+    turn_rate = condition_movement_data.(cond).turn_rate_per_s;
+    entropy = condition_movement_data.(cond).normalized_entropy;
+    
+    if ~isempty(total_dist)
+        fprintf('  Distance: %.1f ± %.1f cm\n', mean(total_dist), std(total_dist));
+        fprintf('  Tortuosity: %.2f ± %.2f\n', mean(tortuosity), std(tortuosity));
+        fprintf('  Turn Rate: %.2f ± %.2f turns/s\n', mean(turn_rate), std(turn_rate));
+        fprintf('  Movement Entropy: %.3f ± %.3f\n', mean(entropy), std(entropy));
+        fprintf('  N animals: %d\n', length(total_dist));
+    end
+end
+
+fprintf('\n=== COMPLETE BEHAVIORAL AND MOVEMENT ANALYSIS FINISHED ===\n');
+
