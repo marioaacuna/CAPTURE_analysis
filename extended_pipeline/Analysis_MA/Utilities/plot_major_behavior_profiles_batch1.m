@@ -483,8 +483,11 @@ for i = 1:length(unique_animal_conditions)
             % Extract SpineF position data (x, y, z coordinates in mm)
             spine_pos = ratception_struct.markers_preproc.SpineF(frame_indices, :);
             
+            % CRITICAL FIX: Downsample to original frequency to avoid upsampled artifacts
+            spine_pos_downsampled = spine_pos(1:rep_factor:end, :);
+            
             % Convert from mm to cm
-            spine_pos_cm = spine_pos / 10;
+            spine_pos_cm = spine_pos_downsampled / 10;
             
             % 1. Calculate total distance moved (2D movement in x-y plane)
             if size(spine_pos_cm, 1) > 1
@@ -492,15 +495,15 @@ for i = 1:length(unique_animal_conditions)
                 frame_distances = sqrt(sum(displacement_2d.^2, 2));
                 total_distance = sum(frame_distances); % in cm
                 
-                % 2. Calculate velocities
-                dt = 1/sampling_freq; % time between frames in seconds
+                % 2. Calculate velocities (now using downsampled data)
+                dt = 1/sampling_freq * rep_factor; % Adjusted time step for downsampled data
                 velocities = frame_distances / dt; % cm/s
                 
                 % Mean velocity when moving (above threshold)
                 moving_mask = velocities > velocity_threshold;
                 if any(moving_mask)
                     mean_velocity_moving = mean(velocities(moving_mask));
-                    time_spent_moving = sum(moving_mask) / sampling_freq; % seconds
+                    time_spent_moving = sum(moving_mask) * dt; % seconds (adjusted for downsampling)
                     percent_time_moving = (sum(moving_mask) / length(velocities)) * 100;
                 else
                     mean_velocity_moving = 0;
@@ -511,11 +514,7 @@ for i = 1:length(unique_animal_conditions)
                 % Overall mean velocity
                 mean_velocity_overall = mean(velocities);
                 
-                % 3. Calculate time spent in center (draft implementation)
-                % Find center of arena for this animal (mean position as approximation)
-                % animal_center_x = mean(spine_pos_cm(:, 1));
-                % animal_center_y = mean(spine_pos_cm(:, 2));
-
+                % 3. Calculate time spent in center (using downsampled data)
                 % Find the boundaries of movement
                 x_min = min(spine_pos_cm(:,1));
                 x_max = max(spine_pos_cm(:,1));
@@ -532,36 +531,113 @@ for i = 1:length(unique_animal_conditions)
                 
                 % Frames spent in center (within center_radius)
                 in_center_mask = distances_from_center <= center_radius;
-                time_in_center = sum(in_center_mask) / sampling_freq; % seconds
+                time_in_center = sum(in_center_mask) * dt; % seconds (adjusted for downsampling)
                 percent_time_in_center = (sum(in_center_mask) / length(distances_from_center)) * 100;
                 
-                % 4. Time spent rearing (using existing behavioral data)
+                % 4. Time spent rearing (using existing behavioral data, adjusted for downsampling)
                 rearing_data = all_behaviors.(matching_field).rearing;
-                time_rearing = sum(rearing_data) / sampling_freq; % seconds
-                percent_time_rearing = (sum(rearing_data) / length(rearing_data)) * 100;
+                rearing_data_downsampled = rearing_data(1:rep_factor:end); % Downsample rearing data too
+                time_rearing = sum(rearing_data_downsampled) * dt; % seconds (adjusted for downsampling)
+                percent_time_rearing = (sum(rearing_data_downsampled) / length(rearing_data_downsampled)) * 100;
                 
                 % 5. Movement complexity metrics
-                % 5.1 Calculate path tortuosity (ratio of actual path to straight-line distance)
-                if size(spine_pos_cm, 1) > 2
-                    % Total path length (sum of all segments)
-                    total_path_length = total_distance; % already calculated above
+                % 5.1 Calculate path tortuosity based on crossing trajectories
+                if size(spine_pos_cm, 1) > 10 % Need sufficient data points
+                    % Define arena boundaries for crossing detection
+                    arena_center_x = animal_center_x;
+                    arena_center_y = animal_center_y;
                     
-                    % Straight-line distance from start to end
-                    start_pos = spine_pos_cm(1, 1:2);
-                    end_pos = spine_pos_cm(end, 1:2);
-                    straight_line_distance = sqrt(sum((end_pos - start_pos).^2));
+                    % Estimate arena radius from the movement range
+                    max_distance_from_center = max(distances_from_center);
+                    arena_radius = max_distance_from_center * 0.9; % Use 90% of max distance as arena boundary
                     
-                    % Tortuosity (1 = straight line, >1 = more tortuous)
-                    if straight_line_distance > 0.1 % Avoid division by very small numbers
-                        path_tortuosity = total_path_length / straight_line_distance;
+                    % Identify significant movements (crossings)
+                    % A crossing is defined as movement from one side of the arena to a significantly different location
+                    min_crossing_distance = arena_radius * 0.6; % Minimum distance to qualify as a crossing
+                    
+                    crossings = [];
+                    current_crossing = [];
+                    last_significant_pos = spine_pos_cm(1, 1:2);
+                    
+                    for pos_idx = 1:size(spine_pos_cm, 1)
+                        current_pos = spine_pos_cm(pos_idx, 1:2);
+                        distance_moved = sqrt(sum((current_pos - last_significant_pos).^2));
+                        
+                        % Add to current crossing
+                        current_crossing = [current_crossing; pos_idx];
+                        
+                        % Check if we've moved far enough to complete a crossing
+                        if distance_moved >= min_crossing_distance
+                            % Store this crossing if it has enough points
+                            if length(current_crossing) >= 5
+                                crossings{end+1} = current_crossing;
+                            end
+                            
+                            % Start new crossing
+                            current_crossing = [pos_idx];
+                            last_significant_pos = current_pos;
+                        end
+                    end
+                    
+                    % Add final crossing if it exists
+                    if length(current_crossing) >= 5
+                        crossings{end+1} = current_crossing;
+                    end
+                    
+                    % Calculate tortuosity for each crossing
+                    crossing_tortuosities = [];
+                    for crossing_idx = 1:length(crossings)
+                        crossing_indices = crossings{crossing_idx};
+                        crossing_path = spine_pos_cm(crossing_indices, 1:2);
+                        
+                        if size(crossing_path, 1) > 2
+                            % Path length for this crossing
+                            crossing_segments = diff(crossing_path);
+                            crossing_distances = sqrt(sum(crossing_segments.^2, 2));
+                            crossing_path_length = sum(crossing_distances);
+                            
+                            % Straight line distance for this crossing
+                            crossing_start = crossing_path(1, :);
+                            crossing_end = crossing_path(end, :);
+                            crossing_straight_distance = sqrt(sum((crossing_end - crossing_start).^2));
+                            
+                            % Tortuosity for this crossing
+                            if crossing_straight_distance > 0.5 % Avoid very small movements
+                                crossing_tortuosity = crossing_path_length / crossing_straight_distance;
+                                crossing_tortuosities = [crossing_tortuosities, crossing_tortuosity];
+                            end
+                        end
+                    end
+                    
+                    % Overall tortuosity metrics
+                    if ~isempty(crossing_tortuosities)
+                        path_tortuosity = mean(crossing_tortuosities);
+                        tortuosity_std = std(crossing_tortuosities);
+                        max_tortuosity = max(crossing_tortuosities);
+                        num_crossings = length(crossing_tortuosities);
                     else
-                        path_tortuosity = 1; % If mouse didn't move much, consider it straight
+                        % Fallback: use simple start-to-end if no crossings detected
+                        start_pos = spine_pos_cm(1, 1:2);
+                        end_pos = spine_pos_cm(end, 1:2);
+                        straight_line_distance = sqrt(sum((end_pos - start_pos).^2));
+                        
+                        if straight_line_distance > 0.1
+                            path_tortuosity = total_distance / straight_line_distance;
+                        else
+                            path_tortuosity = 1;
+                        end
+                        tortuosity_std = 0;
+                        max_tortuosity = path_tortuosity;
+                        num_crossings = 0;
                     end
                 else
                     path_tortuosity = 1;
+                    tortuosity_std = 0;
+                    max_tortuosity = 1;
+                    num_crossings = 0;
                 end
                 
-                % 5.2 Compute angular velocity distribution
+                % 5.2 Compute angular velocity distribution (using downsampled data)
                 if size(spine_pos_cm, 1) > 2
                     % Calculate heading angles between consecutive movements
                     movement_vectors = diff(spine_pos_cm(:, 1:2));
@@ -571,8 +647,8 @@ for i = 1:length(unique_animal_conditions)
                     unwrapped_angles = unwrap(heading_angles);
                     angular_changes = abs(diff(unwrapped_angles));
                     
-                    % Angular velocity (rad/s)
-                    angular_velocities = angular_changes / dt;
+                    % Angular velocity (rad/s) - using corrected time step
+                    angular_velocities = angular_changes / dt; % dt already adjusted for downsampling
                     
                     % Statistics
                     mean_angular_velocity = mean(angular_velocities);
@@ -581,7 +657,7 @@ for i = 1:length(unique_animal_conditions)
                     
                     % Count sharp turns (>90 degrees per frame)
                     sharp_turns = sum(angular_changes > pi/2);
-                    turn_rate = sharp_turns / (length(angular_changes) / sampling_freq); % turns per second
+                    turn_rate = sharp_turns / (length(angular_changes) / (1/dt)); % turns per second
                 else
                     mean_angular_velocity = 0;
                     std_angular_velocity = 0;
@@ -640,6 +716,9 @@ for i = 1:length(unique_animal_conditions)
                 time_rearing = 0;
                 percent_time_rearing = 0;
                 path_tortuosity = 1;
+                tortuosity_std = 0;
+                max_tortuosity = 1;
+                num_crossings = 0;
                 mean_angular_velocity = 0;
                 std_angular_velocity = 0;
                 max_angular_velocity = 0;
@@ -661,6 +740,9 @@ for i = 1:length(unique_animal_conditions)
                 'time_rearing_s', time_rearing, ...
                 'percent_time_rearing', percent_time_rearing, ...
                 'path_tortuosity', path_tortuosity, ...
+                'tortuosity_std', tortuosity_std, ...
+                'max_tortuosity', max_tortuosity, ...
+                'num_crossings', num_crossings, ...
                 'mean_angular_velocity_rad_s', mean_angular_velocity, ...
                 'std_angular_velocity_rad_s', std_angular_velocity, ...
                 'max_angular_velocity_rad_s', max_angular_velocity, ...
@@ -671,9 +753,8 @@ for i = 1:length(unique_animal_conditions)
                 'condition', current_animal_condition(end) ...
             );
             
-            fprintf('Animal %s: Distance=%.1f cm, Vel=%.1f cm/s, Tortuous=%.2f, Entropy=%.2f, Turns=%.1f/s\n', ...
-                current_animal_condition, total_distance, mean_velocity_moving, ...
-                path_tortuosity, normalized_entropy, turn_rate);
+            fprintf('Animal %s: Dist=%.1f cm, Vel=%.1f cm/s \n', ...
+                current_animal_condition, total_distance, mean_velocity_moving);
         end
     end
 end
