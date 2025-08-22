@@ -541,56 +541,106 @@ for i = 1:length(unique_animal_conditions)
                 percent_time_rearing = (sum(rearing_data_downsampled) / length(rearing_data_downsampled)) * 100;
                 
                 % 5. Movement complexity metrics
-                % 5.1 Calculate path tortuosity based on crossing trajectories
+                % 5.1 Calculate path tortuosity based on TRUE arena crossings (not perimeter movements)
                 if size(spine_pos_cm, 1) > 10 % Need sufficient data points
-                    % Define arena boundaries for crossing detection
+                    % Define arena geometry
                     arena_center_x = animal_center_x;
                     arena_center_y = animal_center_y;
                     
                     % Estimate arena radius from the movement range
                     max_distance_from_center = max(distances_from_center);
-                    arena_radius = max_distance_from_center * 0.9; % Use 90% of max distance as arena boundary
+                    arena_radius = max_distance_from_center * 0.85; % Conservative estimate
                     
-                    % Identify significant movements (crossings)
-                    % A crossing is defined as movement from one side of the arena to a significantly different location
-                    min_crossing_distance = arena_radius * 0.6; % Minimum distance to qualify as a crossing
+                    % Define zones for crossing analysis
+                    center_zone_radius = arena_radius * 0.3; % Inner 30% is "center zone"
+                    outer_zone_radius = arena_radius * 0.8;   % Outer 80% is "perimeter zone"
                     
-                    crossings = [];
-                    current_crossing = [];
-                    last_significant_pos = spine_pos_cm(1, 1:2);
+                    % Identify true crossings with constraints:
+                    % 1. Must start and end in different arena sectors (opposite sides)
+                    % 2. Must pass through or near the center zone
+                    % 3. Minimum straight-line distance requirement
+                    
+                    true_crossings = [];
+                    potential_crossing = [];
+                    crossing_start_pos = [];
+                    crossing_start_sector = [];
+                    
+                    % Calculate sectors (divide arena into 8 sectors: N, NE, E, SE, S, SW, W, NW)
+                    n_sectors = 8;
+                    sector_angles = linspace(0, 2*pi, n_sectors + 1);
                     
                     for pos_idx = 1:size(spine_pos_cm, 1)
                         current_pos = spine_pos_cm(pos_idx, 1:2);
-                        distance_moved = sqrt(sum((current_pos - last_significant_pos).^2));
+                        distance_from_center = distances_from_center(pos_idx);
                         
-                        % Add to current crossing
-                        current_crossing = [current_crossing; pos_idx];
+                        % Calculate which sector this position is in
+                        angle_from_center = atan2(current_pos(2) - arena_center_y, current_pos(1) - arena_center_x);
+                        if angle_from_center < 0
+                            angle_from_center = angle_from_center + 2*pi;
+                        end
+                        current_sector = find(angle_from_center >= sector_angles(1:end-1) & angle_from_center < sector_angles(2:end), 1);
+                        if isempty(current_sector)
+                            current_sector = n_sectors; % Handle edge case
+                        end
                         
-                        % Check if we've moved far enough to complete a crossing
-                        if distance_moved >= min_crossing_distance
-                            % Store this crossing if it has enough points
-                            if length(current_crossing) >= 5
-                                crossings{end+1} = current_crossing;
-                            end
+                        % Check if we're starting a potential crossing (in outer zone)
+                        if isempty(potential_crossing) && distance_from_center > outer_zone_radius * 0.7
+                            potential_crossing = [pos_idx];
+                            crossing_start_pos = current_pos;
+                            crossing_start_sector = current_sector;
+                        elseif ~isempty(potential_crossing)
+                            % Continue building potential crossing
+                            potential_crossing = [potential_crossing; pos_idx];
                             
-                            % Start new crossing
-                            current_crossing = [pos_idx];
-                            last_significant_pos = current_pos;
+                            % Check if we've completed a true crossing
+                            if distance_from_center > outer_zone_radius * 0.7 && length(potential_crossing) > 10
+                                % Calculate if this is a true crossing
+                                crossing_end_pos = current_pos;
+                                crossing_end_sector = current_sector;
+                                
+                                % Constraint 1: Must be in different sectors (preferably opposite)
+                                sector_difference = min(abs(crossing_end_sector - crossing_start_sector), ...
+                                                      n_sectors - abs(crossing_end_sector - crossing_start_sector));
+                                
+                                % Constraint 2: Check if path went through or near center
+                                crossing_path = spine_pos_cm(potential_crossing, 1:2);
+                                min_distance_to_center = min(sqrt(sum((crossing_path - [arena_center_x, arena_center_y]).^2, 2)));
+                                passed_near_center = min_distance_to_center <= center_zone_radius * 1.5;
+                                
+                                % Constraint 3: Minimum straight-line distance
+                                straight_line_distance = sqrt(sum((crossing_end_pos - crossing_start_pos).^2));
+                                min_crossing_distance = arena_radius * 0.8; % Must cross significant portion of arena
+                                
+                                % Constraint 4: Exclude pure perimeter movements
+                                % Check if most of the path was in the outer zone (perimeter following)
+                                crossing_distances_from_center = sqrt(sum((crossing_path - [arena_center_x, arena_center_y]).^2, 2));
+                                perimeter_points = sum(crossing_distances_from_center > outer_zone_radius * 0.8);
+                                is_perimeter_movement = (perimeter_points / length(crossing_distances_from_center)) > 0.7;
+                                
+                                % Accept crossing if it meets all constraints
+                                if sector_difference >= 2 && ... % Different sectors (at least 90° apart)
+                                   passed_near_center && ...     % Went through/near center
+                                   straight_line_distance >= min_crossing_distance && ... % Significant distance
+                                   ~is_perimeter_movement        % Not just perimeter following
+                                    
+                                    true_crossings{end+1} = potential_crossing;
+                                end
+                                
+                                % Reset for next potential crossing
+                                potential_crossing = [];
+                                crossing_start_pos = [];
+                                crossing_start_sector = [];
+                            end
                         end
                     end
                     
-                    % Add final crossing if it exists
-                    if length(current_crossing) >= 5
-                        crossings{end+1} = current_crossing;
-                    end
-                    
-                    % Calculate tortuosity for each crossing
+                    % Calculate tortuosity for each TRUE crossing
                     crossing_tortuosities = [];
-                    for crossing_idx = 1:length(crossings)
-                        crossing_indices = crossings{crossing_idx};
+                    for crossing_idx = 1:length(true_crossings)
+                        crossing_indices = true_crossings{crossing_idx};
                         crossing_path = spine_pos_cm(crossing_indices, 1:2);
                         
-                        if size(crossing_path, 1) > 2
+                        if size(crossing_path, 1) > 5
                             % Path length for this crossing
                             crossing_segments = diff(crossing_path);
                             crossing_distances = sqrt(sum(crossing_segments.^2, 2));
@@ -601,33 +651,25 @@ for i = 1:length(unique_animal_conditions)
                             crossing_end = crossing_path(end, :);
                             crossing_straight_distance = sqrt(sum((crossing_end - crossing_start).^2));
                             
-                            % Tortuosity for this crossing
-                            if crossing_straight_distance > 0.5 % Avoid very small movements
+                            % Tortuosity for this crossing (only if meaningful distance)
+                            if crossing_straight_distance > arena_radius * 0.3
                                 crossing_tortuosity = crossing_path_length / crossing_straight_distance;
                                 crossing_tortuosities = [crossing_tortuosities, crossing_tortuosity];
                             end
                         end
                     end
                     
-                    % Overall tortuosity metrics
+                    % Overall tortuosity metrics for TRUE crossings only
                     if ~isempty(crossing_tortuosities)
                         path_tortuosity = mean(crossing_tortuosities);
                         tortuosity_std = std(crossing_tortuosities);
                         max_tortuosity = max(crossing_tortuosities);
                         num_crossings = length(crossing_tortuosities);
                     else
-                        % Fallback: use simple start-to-end if no crossings detected
-                        start_pos = spine_pos_cm(1, 1:2);
-                        end_pos = spine_pos_cm(end, 1:2);
-                        straight_line_distance = sqrt(sum((end_pos - start_pos).^2));
-                        
-                        if straight_line_distance > 0.1
-                            path_tortuosity = total_distance / straight_line_distance;
-                        else
-                            path_tortuosity = 1;
-                        end
+                        % No true crossings detected - set to neutral values
+                        path_tortuosity = 1; % Neutral tortuosity
                         tortuosity_std = 0;
-                        max_tortuosity = path_tortuosity;
+                        max_tortuosity = 1;
                         num_crossings = 0;
                     end
                 else
