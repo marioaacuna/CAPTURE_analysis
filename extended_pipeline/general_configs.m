@@ -27,7 +27,7 @@ function GC = general_configs()
         temp_root = fullfile('~/Documents/Temp_analysis/CAPTURE');
         drive_V = '/Volumes/V/';
     elseif isunix
-        project_path = '/home/mario/Documents/Projects/CAPTURE/';
+        project_path = '/media/mario/no backup/CAPTURE/data';
         temp_root = '/home/mario/Documents/Projects/CAPTURE/_temp/';
         drive_V = '/mnt/groupnevian4';
 
