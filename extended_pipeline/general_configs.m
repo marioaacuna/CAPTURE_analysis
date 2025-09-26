@@ -15,7 +15,8 @@ function GC = general_configs()
     % Temp root folder for outputs
     if ispc
         temp_root = 'D:/CAPTURE';
-        project_path = 'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\extended_pipeline';
+        project_path = fullfile(temp_root);
+        %'C:\Users\acuna\OneDrive - Universitaet Bern\Spontaneous_pain_kinematics\extended_pipeline';
         drive_V = 'V:\';
     elseif ismac
         %mac_name = 'marioacuna';

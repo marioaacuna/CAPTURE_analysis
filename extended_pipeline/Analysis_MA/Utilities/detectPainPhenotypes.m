@@ -4,10 +4,10 @@ function [pain_frames, metrics] = detectPainPhenotypes(non_aligned_mocap, aligne
     %         metrics - structure with detailed measurements
     
     % Step 1: Identify still frames based on non-aligned SpineM velocity
-    vel_threshold = 0.05; % adjust based on your data
+    vel_threshold =    26.7802; % according to mean + std from 24 sessions
     spine_vel = calculateVelocity(non_aligned_mocap.SpineM, params);
-    still_frames = spine_vel < median(spine_vel);  
-
+    % still_frames = spine_vel < mean(spine_vel) + std(spine_vel);  
+    still_frames = spine_vel < vel_threshold;
     % Initialize output
     pain_frames = false(size(still_frames));
 
@@ -65,9 +65,9 @@ function [pain_frames, metrics] = detectPainPhenotypes(non_aligned_mocap, aligne
         lateral_asymmetry = left_paw_lateral - right_paw_lateral;
         
         % Define pain criteria using aligned metrics
-        is_paw_licking =   snout_paw_dist < 15 && ...
+        is_paw_licking =   snout_paw_dist < 20 && ...
                            aligned_mocap.Snout(frame,2) > 0 &&...; % leaning left
-                           L_hind_fore_paw_dist < 20 &&...
+                           L_hind_fore_paw_dist < 30 &&...
                            aligned_mocap.HindpawL(frame,1) > 0;
                            
                         % trunk_angle_coronal < 90 ; ... % negative angle indicates left lean
@@ -93,8 +93,9 @@ function [pain_frames, metrics] = detectPainPhenotypes(non_aligned_mocap, aligne
         metrics.arm_asymmetry(frame) = arm_asymmetry;
         metrics.neck_angle(frame) = neck_angle;
         metrics.paw_licking_detected(frame) = is_paw_licking;
+        
     end
-   
+   metrics.is_still = still_frames;
 end
 
 % Helper functions
