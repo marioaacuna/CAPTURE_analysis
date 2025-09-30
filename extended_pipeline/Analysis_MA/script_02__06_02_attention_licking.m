@@ -34,7 +34,7 @@ params = struct();
 params.velocity_percentile = 87; % More stringent threshold
 params.min_bout_duration = 0.1; % Longer minimum bout
 params.sampling_rate = 100; % Hz
-params.smoothing_window = 5; % frames
+params.smoothing_window = 200; % frames
 params.z_smoothing_window = 5;
 params.z_threshold_percentile = 99.3;  % Threshold for Z displacement
 params.direction_threshold = 75;  % Max angle deviation from heading (degrees)
@@ -48,7 +48,7 @@ params.markers_to_study = {'WristL', 'WristR', 'KneeL', 'KneeR','AnkleL', 'Ankle
 params.pain_threshold = 0.59;
 params.temporal_window = 5; % 0.1 seconds at 100 Hz, example.
 
-params.velocity_percentile = 15; % For movement threshold
+params.velocity_percentile = 5; % For movement threshold, default: 15
 params.feature_smoothing_window = 5; % For temporal smoothing
 params.max_smoothing_window = 20; % Maximum smoothing window
 [pain_frames, metrics]  = detectPainPhenotypes_v2(markers_not_aligned_ds,markers_aligned_ds, params);
