@@ -20,8 +20,8 @@ function [pain_frames, metrics, confidence_scores] = detectPainPhenotypes_v2(non
     
     % Step 3: Extract and smooth temporal features
     raw_features = extractAllFrameFeatures(aligned_mocap);
-    smoothed_features = temporalFeatureSmoothing(raw_features, params);
-    
+    % smoothed_features = temporalFeatureSmoothing(raw_features, params);
+    smoothed_features = raw_features;
     % Step 4: Vectorized multi-modal pain behavior detection
     % Calculate probabilities for all frames at once
     % prob_paw_licking = assessPawLickingBilateral(smoothed_features, baseline_stats);
@@ -40,12 +40,22 @@ function [pain_frames, metrics, confidence_scores] = detectPainPhenotypes_v2(non
     %                weights(5) * prob_grooming;
     
 
-    % Combine probabilities by taking the maximum score across key pain phenotypes.
-    % This ensures that a strong signal from any single behavior is not diluted.
-    % Paw licking, guarding, asymmetry, and hunching are considered primary pain indicators.
-    pain_phenotype_probs = [prob_paw_licking, prob_guarding, prob_asymmetry, prob_hunched];
-    combined_prob = max(pain_phenotype_probs, [], 2);
+    % % Combine probabilities by taking the maximum score across key pain phenotypes.
+    % % This ensures that a strong signal from any single behavior is not diluted.
+    % % Paw licking, guarding, asymmetry, and hunching are considered primary pain indicators.
+    % pain_phenotype_probs = [prob_paw_licking, prob_guarding, prob_asymmetry, prob_hunched];
+    % combined_prob = max(pain_phenotype_probs, [], 2);
     
+    % Stage 1: Primary behavior detection
+    primary_detection = max(prob_paw_licking, prob_hunched); % Your strongest signals
+    
+    % Stage 2: Confirmation from secondary behaviors  
+    secondary_evidence = mean([prob_guarding, prob_asymmetry],2);
+    
+    % Combine with interaction
+    combined_prob = primary_detection * 0.7 + (0.3 * secondary_evidence);
+
+
     % Apply only to candidate frames
     confidence_scores(candidate_frames) = combined_prob(candidate_frames);
 
@@ -217,17 +227,18 @@ end
 function prob = assessPawLickingLeftOnly(features, baseline_stats)
     % Z-score for left paw distance (keep this - it works)
     z_score_L = (features.snout_to_hindpaw_L - baseline_stats.snout_paw_L_mean) / baseline_stats.snout_paw_L_std;
-    dist_score_L = sigmoid(-z_score_L, 2.5, 0.5); 
+    dist_score_L = sigmoid(-z_score_L, 3, 0.3); 
 
     % Make other components more stringent
-    proximity_score = sigmoid(-features.forepaw_to_hindpaw_L + 30, 0, 2); % Tighter threshold
-    lateral_lean_score = sigmoid(features.lateral_deviation - 5, 0, 2); % Require significant lean
-    orientation_score = sigmoid(-features.head_orientation + 10, 0, 3); % Require clear head turn
+    proximity_score = sigmoid(-features.forepaw_to_hindpaw_L + 30, 0, .1); % Tighter threshold
+    % lateral_lean_score = sigmoid(features.lateral_deviation, 0, .1); % Require significant lean
+    orientation_score = sigmoid(-features.head_orientation, 45, .1); % Require clear head turn
     
     % Use multiplicative logic instead of additive (requires ALL conditions)
     prob = dist_score_L * 0.6 + ...
-           (dist_score_L .* proximity_score .* lateral_lean_score .* orientation_score) * 0.4;
-    
+              (dist_score_L .* proximity_score .* orientation_score) * 0.4; %           % (dist_score_L .* proximity_score .* lateral_lean_score .* orientation_score) * 0.4;
+
+ 
     prob = max(0, min(1, prob));
 end
 
@@ -251,23 +262,54 @@ end
 %     prob = max(0, min(1, prob));
 % end
 
+% function prob = assessGuardingAdaptive(features, baseline_stats)
+%     % Vectorized adaptive assessment of protective guarding behavior
+% 
+%   z_score_L = (features.left_hindlimb_angle - baseline_stats.limb_angle_L_mean) / baseline_stats.limb_angle_L_std;
+%     z_score_R = (features.right_hindlimb_angle - baseline_stats.limb_angle_R_mean) / baseline_stats.limb_angle_R_std;
+% 
+%     limb_flexion_score = max(sigmoid(z_score_L, 1.5, 0.5), sigmoid(z_score_R, 1.5, 0.5));
+% 
+%     % Fix elevation scoring - use stability around baseline
+%     elevation_z = zscore(features.spine_elevation);
+%     elevation_stability_score = sigmoid((elevation_z), 0.5, 0.3); % Higher score for low deviation
+% 
+%     % Asymmetry score
+%     asymmetry_z = (features.limb_asymmetry - baseline_stats.asymmetry_mean) / baseline_stats.asymmetry_std;
+%     asymmetry_score = sigmoid(asymmetry_z, 2, 0.5);
+% 
+%     prob = 0.4 * limb_flexion_score + 0.4 * elevation_stability_score + 0.2 * asymmetry_score;
+%     prob = max(0, min(1, prob));
+% end
+
 function prob = assessGuardingAdaptive(features, baseline_stats)
-    % Vectorized adaptive assessment of protective guarding behavior
+    % Classical guarding assessment for left hindpaw injury
     
-    % Z-scores for limb angles
-    z_score_L = (features.left_hindlimb_angle - baseline_stats.limb_angle_L_mean) / baseline_stats.limb_angle_L_std;
-    z_score_R = (features.right_hindlimb_angle - baseline_stats.limb_angle_R_mean) / baseline_stats.limb_angle_R_std;
+    % 1. Weight shifting - body shifted away from injured left paw
+    lateral_shift_z = zscore(features.lateral_deviation);
+    weight_shift_score = sigmoid(lateral_shift_z, 0.5, 0.5); % Positive = shift right (away from left injury)
     
-    limb_flexion_score = max(sigmoid(z_score_L, 1.5, 0.5), sigmoid(z_score_R, 1.5, 0.5));
-    elevation_score = sigmoid(features.spine_elevation, 5, 2);
+    % 2. Protective flexion - left hindlimb more flexed than baseline
+    left_limb_z = (features.left_hindlimb_angle - baseline_stats.limb_angle_L_mean) / baseline_stats.limb_angle_L_std;
+    protective_flexion_score = sigmoid(left_limb_z, 2.0, 0.15); % Higher flexion angle
     
-    % Adaptive asymmetry threshold
+    % 3. Limb elevation - left hindpaw lifted to avoid ground contact
+    paw_height_asym_z = zscore(features.paw_height_asymmetry);
+    limb_elevation_score = sigmoid(paw_height_asym_z, 1.0, 0.5); % Left paw higher than right
+    
+    % 4. Asymmetric loading - overall limb asymmetry increased
     asymmetry_z = (features.limb_asymmetry - baseline_stats.asymmetry_mean) / baseline_stats.asymmetry_std;
-    asymmetry_score = sigmoid(asymmetry_z, 2, 0.5);
+    asymmetric_loading_score = sigmoid(asymmetry_z, 1.5, 0.5); % Increased asymmetry
     
-    prob = 0.5 * limb_flexion_score + 0.3 * elevation_score + 0.2 * asymmetry_score;
+    % Weighted combination focusing on protective behaviors
+    prob = 0.3 * weight_shift_score + ...
+           0.3 * protective_flexion_score + ...
+           0.20 * limb_elevation_score + ...
+           0.20 * asymmetric_loading_score;
+    
     prob = max(0, min(1, prob));
 end
+
 
 function prob = assessAsymmetryAdaptive(features, baseline_stats)
     % Vectorized adaptive assessment of postural asymmetry
@@ -276,8 +318,9 @@ function prob = assessAsymmetryAdaptive(features, baseline_stats)
     asymmetry_z = (features.limb_asymmetry - baseline_stats.asymmetry_mean) / baseline_stats.asymmetry_std;
     limb_asym_score = sigmoid(asymmetry_z, 2, 0.5);
     
-    lateral_asym_score = sigmoid(abs(features.lateral_deviation), 8, 3);
-    height_asym_score = sigmoid(features.paw_height_asymmetry, 6, 2);
+    lat_dev_z = zscore(features.lateral_deviation);
+    lateral_asym_score = sigmoid(abs(lat_dev_z), 2, 3);
+    height_asym_score = sigmoid(features.paw_height_asymmetry, 2, 2);
     
     prob = 0.5 * limb_asym_score + 0.3 * lateral_asym_score + 0.2 * height_asym_score;
     prob = max(0, min(1, prob));
@@ -288,9 +331,9 @@ function prob = assessHunchedPostureAdaptive(features, baseline_stats)
     
     % Z-score for trunk curvature
     curvature_z = (features.trunk_curvature - baseline_stats.curvature_mean) / baseline_stats.curvature_std;
-    curvature_score = sigmoid(curvature_z, 2, 0.5);
-    
-    elevation_score = sigmoid(features.spine_elevation, 6, 2);
+    curvature_score = sigmoid(-curvature_z, 0.5, 0.5);
+
+    elevation_score = sigmoid(-zscore(features.spine_elevation), 0.2, 0.5);
     
     prob = 0.7 * curvature_score + 0.3 * elevation_score;
     prob = max(0, min(1, prob));
@@ -369,7 +412,7 @@ function curvature = calculateTrunkCurvature(aligned_mocap, frame)
 end
 
 function deviation = calculateLateralDeviation(aligned_mocap, frame)
-    spine_y = aligned_mocap.SpineM(frame, 2);
+    spine_y = aligned_mocap.SpineF(frame, 2);
     deviation = spine_y;
 end
 
