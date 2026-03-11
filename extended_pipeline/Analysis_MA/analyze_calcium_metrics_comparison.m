@@ -36,12 +36,29 @@ function [cluster_changes, plot_order] = analyze_calcium_metrics_comparison(data
     end
     
     % Set group labels based on comparison type
-    if strcmp(comparison, 'S_v_F')
-        group1_label = 'Saline';
-        group2_label = 'Formalin';
-    else % H_v_N
-        group1_label = 'Sham';
-        group2_label = 'Neuropathic';
+    switch comparison
+        case 'S_v_F'
+            group1_label = 'Saline';
+            group2_label = 'Formalin';
+        case 'F_v_C'
+            group1_label = 'Formalin';
+            group2_label = 'Carprofen';
+        case 'H_v_N'
+            group1_label = 'Sham';
+            group2_label = 'Neuropathic';
+        case 'N_v_G'
+            group1_label = 'Neuropathic';
+            group2_label = 'Gabapentin';
+        otherwise
+            % Generic fallback for unknown comparison types
+            parts = strsplit(comparison, '_v_');
+            if length(parts) == 2
+                group1_label = parts{1};
+                group2_label = parts{2};
+            else
+                group1_label = 'Group1';
+                group2_label = 'Group2';
+            end
     end
 
     % Find global clusters
